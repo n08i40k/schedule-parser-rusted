@@ -1,0 +1,15 @@
+[workspace]
+members = ["lib/schedule_parser"]
+
+[package]
+name = "schedule-parser-rusted"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+actix-web = "4.10.2"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_repr = "0.1.20"
+serde_json = "1.0.140"
+schedule_parser = { path = "./lib/schedule_parser" }
