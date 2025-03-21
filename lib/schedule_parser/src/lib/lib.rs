@@ -1,13 +1,13 @@
-use crate::LessonParseResult::{Lessons, Street};
 use crate::schema::LessonType::Break;
 use crate::schema::{Day, Lesson, LessonSubGroup, LessonTime, LessonType, ScheduleEntity};
-use calamine::{Reader, Xls, open_workbook};
+use crate::LessonParseResult::{Lessons, Street};
+use calamine::{open_workbook_from_rs, Reader, Xls};
 use chrono::{Duration, NaiveDateTime};
-use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
+use fuzzy_matcher::FuzzyMatcher;
 use regex::Regex;
 use std::collections::HashMap;
-use std::path::Path;
+use std::io::Cursor;
 use std::sync::LazyLock;
 
 mod schema;
@@ -539,12 +539,13 @@ fn convert_groups_to_teachers(
 }
 
 pub fn parse_xls(
-    path: &Path,
+    buffer: &Vec<u8>,
 ) -> (
     HashMap<String, ScheduleEntity>,
     HashMap<String, ScheduleEntity>,
 ) {
-    let mut workbook: Xls<_> = open_workbook(path).expect("Can't open workbook");
+    let cursor = Cursor::new(&buffer);
+    let mut workbook: Xls<_> = open_workbook_from_rs(cursor).expect("Can't open workbook");
 
     let worksheet: WorkSheet = workbook
         .worksheets()
@@ -693,9 +694,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
-        let result = parse_xls(Path::new("../../schedule.xls"));
-        
+    fn read() {
+        let buffer: Vec<u8> = include_bytes!("../../../../schedule.xls").to_vec();
+        let result = parse_xls(&buffer);
+
         assert_ne!(result.0.len(), 0);
         assert_ne!(result.1.len(), 0);
     }

@@ -22,4 +22,4 @@ jobs:
       - name: Build
         run: cargo build --verbose
       - name: Run tests
-        run: cargo test --verbose -p schedule_parser
+        run: cargo test --verbose -p schedule-parser-rusted -p schedule_parser
