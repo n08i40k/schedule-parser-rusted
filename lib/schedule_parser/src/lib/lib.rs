@@ -1,6 +1,6 @@
 use crate::LessonParseResult::{Lessons, Street};
 use crate::schema::LessonType::Break;
-use crate::schema::{Day, Group, Lesson, LessonSubGroup, LessonTime, LessonType};
+use crate::schema::{Day, Lesson, LessonSubGroup, LessonTime, LessonType, ScheduleEntity};
 use calamine::{Reader, Xls, open_workbook};
 use chrono::{Duration, NaiveDateTime};
 use fuzzy_matcher::FuzzyMatcher;
@@ -470,7 +470,80 @@ fn parse_name_and_subgroups(name: &String) -> (String, Vec<LessonSubGroup>) {
     (lesson_name, subgroups)
 }
 
-pub fn parse_xls(path: &Path) -> HashMap<String, Group> {
+fn convert_groups_to_teachers(
+    groups: &HashMap<String, ScheduleEntity>,
+) -> HashMap<String, ScheduleEntity> {
+    let mut teachers: HashMap<String, ScheduleEntity> = HashMap::new();
+
+    let empty_days: Vec<Day> = groups
+        .values()
+        .next()
+        .unwrap()
+        .days
+        .iter()
+        .map(|day| Day {
+            name: day.name.clone(),
+            street: day.street.clone(),
+            date: day.date.clone(),
+            lessons: vec![],
+        })
+        .collect();
+
+    for group in groups.values() {
+        for (index, day) in group.days.iter().enumerate() {
+            for group_lesson in &day.lessons {
+                if group_lesson.lesson_type == Break {
+                    continue;
+                }
+
+                if group_lesson.subgroups.is_none() {
+                    continue;
+                }
+
+                let subgroups = group_lesson.subgroups.as_ref().unwrap();
+
+                for subgroup in subgroups {
+                    if subgroup.teacher == "Ошибка в расписании" {
+                        continue;
+                    }
+
+                    if !teachers.contains_key(&subgroup.teacher) {
+                        teachers.insert(
+                            subgroup.teacher.clone(),
+                            ScheduleEntity {
+                                name: subgroup.teacher.clone(),
+                                days: empty_days.to_vec(),
+                            },
+                        );
+                    }
+
+                    let teacher_day = teachers
+                        .get_mut(&subgroup.teacher)
+                        .unwrap()
+                        .days
+                        .get_mut(index)
+                        .unwrap();
+
+                    teacher_day.lessons.push({
+                        let mut lesson = group_lesson.clone();
+                        lesson.group = Some(group.name.clone());
+
+                        lesson
+                    });
+                }
+            }
+        }
+    }
+
+    teachers
+}
+
+pub fn parse_xls(
+    path: &Path,
+) -> (
+    HashMap<String, ScheduleEntity>,
+    HashMap<String, ScheduleEntity>,
+) {
     let mut workbook: Xls<_> = open_workbook(path).expect("Can't open workbook");
 
     let worksheet: WorkSheet = workbook
@@ -482,13 +555,13 @@ pub fn parse_xls(path: &Path) -> HashMap<String, Group> {
 
     let (days_markup, groups_markup) = parse_skeleton(&worksheet);
 
-    let mut groups: HashMap<String, Group> = HashMap::new();
+    let mut groups: HashMap<String, ScheduleEntity> = HashMap::new();
     let mut days_times: Vec<Vec<InternalTime>> = Vec::new();
 
     let saturday_end_row = worksheet.end().unwrap().0;
 
     for group_markup in groups_markup {
-        let mut group = Group {
+        let mut group = ScheduleEntity {
             name: group_markup.name,
             days: Vec::new(),
         };
@@ -612,7 +685,7 @@ pub fn parse_xls(path: &Path) -> HashMap<String, Group> {
         groups.insert(group.name.clone(), group);
     }
 
-    groups
+    (convert_groups_to_teachers(&groups), groups)
 }
 
 #[cfg(test)]
@@ -622,6 +695,8 @@ mod tests {
     #[test]
     fn it_works() {
         let result = parse_xls(Path::new("../../schedule.xls"));
-        assert_ne!(result.len(), 0);
+        
+        assert_ne!(result.0.len(), 0);
+        assert_ne!(result.1.len(), 0);
     }
 }

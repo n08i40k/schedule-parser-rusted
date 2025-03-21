@@ -600,7 +600,7 @@ dependencies = [
 
 [[package]]
 name = "schedule-parser-rusted"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "schedule_parser",
  "serde",
@@ -609,7 +609,7 @@ dependencies = [
 
 [[package]]
 name = "schedule_parser"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "calamine",
  "chrono",

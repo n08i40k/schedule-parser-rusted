@@ -1,9 +1,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use std::collections::HashMap;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LessonTime {
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,
@@ -22,7 +22,7 @@ pub enum LessonType {
     ExamDefault,     // Экзамен
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LessonSubGroup {
     pub number: u8,
 
@@ -31,7 +31,7 @@ pub struct LessonSubGroup {
     pub teacher: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Lesson {
     /**
      * Тип занятия
@@ -67,7 +67,7 @@ pub struct Lesson {
     pub group: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Day {
     pub name: String,
 
@@ -79,7 +79,7 @@ pub struct Day {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Group {
+pub struct ScheduleEntity {
     pub name: String,
 
     pub days: Vec<Day>,
@@ -90,8 +90,18 @@ pub struct Schedule {
     #[serde(rename = "updatedAt")]
     pub updated_at: DateTime<Utc>,
 
-    pub groups: HashMap<String, Group>,
+    pub groups: HashMap<String, ScheduleEntity>,
 
     #[serde(rename = "updatedGroups")]
     pub updated_groups: Vec<Vec<usize>>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TeacherSchedule {
+    #[serde(rename = "updatedAt")]
+    pub updated_at: DateTime<Utc>,
+
+    pub teacher: ScheduleEntity,
+
+    pub updated: Vec<usize>,
 }
