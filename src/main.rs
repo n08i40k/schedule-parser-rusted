@@ -1,39 +1,57 @@
+use crate::routes::auth::sign_in::sign_in;
 use crate::xls_downloader::basic_impl::BasicXlsDownloader;
-use crate::xls_downloader::interface::XLSDownloader;
-use schedule_parser::parse_xls;
-use std::{env, fs};
+use actix_web::{web, App, HttpServer};
+use chrono::{DateTime, Utc};
+use diesel::{Connection, PgConnection};
+use dotenvy::dotenv;
+use schedule_parser::schema::ScheduleEntity;
+use std::collections::HashMap;
+use std::sync::Mutex;
+use std::env;
 
+mod database;
+mod routes;
 mod xls_downloader;
 
-#[tokio::main]
+pub struct AppState {
+    downloader: Mutex<BasicXlsDownloader>,
+    schedule: Mutex<
+        Option<(
+            String,
+            DateTime<Utc>,
+            (
+                HashMap<String, ScheduleEntity>,
+                HashMap<String, ScheduleEntity>,
+            ),
+        )>,
+    >,
+    database: Mutex<PgConnection>,
+}
+
+#[actix_web::main]
 async fn main() {
-    let args: Vec<String> = env::args().collect();
-    assert_ne!(args.len(), 1);
+    dotenv().ok();
 
-    let mut downloader = BasicXlsDownloader::new();
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    downloader
-        .set_url(args[1].to_string())
-        .await
-        .expect("Failed to set url");
+    let data = web::Data::new(AppState {
+        downloader: Mutex::new(BasicXlsDownloader::new()),
+        schedule: Mutex::new(None),
+        database: Mutex::new(
+            PgConnection::establish(&database_url)
+                .unwrap_or_else(|_| panic!("Error connecting to {}", database_url)),
+        ),
+    });
 
-    let fetch_res = downloader.fetch(false).await.expect("Failed to fetch xls");
+    HttpServer::new(move || {
+        let schedule_scope = web::scope("/auth").service(sign_in);
+        let api_scope = web::scope("/api/v1").service(schedule_scope);
 
-    let (teachers, groups) = parse_xls(fetch_res.data.as_ref().unwrap());
-
-    fs::write(
-        "./schedule.json",
-        serde_json::to_string_pretty(&groups)
-            .expect("Failed to serialize schedule")
-            .as_bytes(),
-    )
-    .expect("Failed to write schedule");
-
-    fs::write(
-        "./teachers.json",
-        serde_json::to_string_pretty(&teachers)
-            .expect("Failed to serialize teachers schedule")
-            .as_bytes(),
-    )
-    .expect("Failed to write teachers schedule");
+        App::new().app_data(data.clone()).service(api_scope)
+    })
+    .bind(("127.0.0.1", 8080))
+    .unwrap()
+    .run()
+    .await
+    .unwrap();
 }

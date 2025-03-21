@@ -2,3 +2,5 @@
 .~*.xls
 schedule.json
 teachers.json
+
+.env*

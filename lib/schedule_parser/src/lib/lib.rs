@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::LazyLock;
 
-mod schema;
+pub mod schema;
 
 struct InternalId {
     /**
