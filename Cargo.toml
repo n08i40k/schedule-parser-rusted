@@ -8,6 +8,10 @@ edition = "2024"
 publish = false
 
 [dependencies]
+bcrypt = "0.17.0"
+jwt = "0.16.0"
+hmac = "0.12.1"
+sha2 = "0.10.8"
 diesel = { version = "2.2.8", features = ["postgres"] }
 diesel-derive-enum = { git = "https://github.com/Havunen/diesel-derive-enum.git", features = ["postgres"] }
 dotenvy = "0.15.7"

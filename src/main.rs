@@ -1,16 +1,17 @@
 use crate::routes::auth::sign_in::sign_in;
 use crate::xls_downloader::basic_impl::BasicXlsDownloader;
-use actix_web::{web, App, HttpServer};
+use actix_web::{App, HttpServer, web};
 use chrono::{DateTime, Utc};
 use diesel::{Connection, PgConnection};
 use dotenvy::dotenv;
 use schedule_parser::schema::ScheduleEntity;
 use std::collections::HashMap;
-use std::sync::Mutex;
 use std::env;
+use std::sync::{Mutex, MutexGuard};
 
 mod database;
 mod routes;
+mod utility;
 mod xls_downloader;
 
 pub struct AppState {
@@ -26,6 +27,12 @@ pub struct AppState {
         )>,
     >,
     database: Mutex<PgConnection>,
+}
+
+impl AppState {
+    pub fn connection(&self) -> MutexGuard<PgConnection> {
+        self.database.lock().unwrap()
+    }
 }
 
 #[actix_web::main]
