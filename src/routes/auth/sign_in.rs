@@ -16,12 +16,11 @@ pub async fn sign_in(data: Json<SignInDto>, app_state: web::Data<AppState>) -> J
                 let mut lock = app_state.connection();
                 let conn = lock.deref_mut();
 
-                user.access_token =
-                    utility::jwt::encode(&user.id).expect("Failed to generate jet token");
+                user.access_token = utility::jwt::encode(&user.id);
 
                 user.save_changes::<User>(conn)
                     .expect("Failed to update user");
-                
+
                 SignInResult::ok(&user)
             }
             Ok(false) | Err(_) => SignInResult::err(IncorrectCredentials),

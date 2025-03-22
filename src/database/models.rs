@@ -1,5 +1,4 @@
 use diesel::prelude::*;
-use diesel::{AsExpression, FromSqlRow};
 use serde::Serialize;
 
 #[derive(diesel_derive_enum::DbEnum, Serialize, Debug, Clone, Copy, PartialEq)]
@@ -14,7 +13,7 @@ pub enum UserRole {
 
 #[derive(Identifiable, AsChangeset, Queryable, Selectable, Serialize)]
 #[diesel(table_name = crate::database::schema::users)]
-#[changeset_options(treat_none_as_null = "true")]
+#[diesel(treat_none_as_null = true)]
 pub struct User {
     pub id: String,
     pub username: String,
