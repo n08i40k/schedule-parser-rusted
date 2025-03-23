@@ -20,6 +20,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build
-        run: cargo build --verbose
+        run: cargo build
+      - name: Create .env.test
+        run: touch .env.test
       - name: Run tests
-        run: cargo test --verbose -p schedule-parser-rusted -p schedule_parser
+        run: cargo test -p schedule-parser-rusted -p schedule_parser
+        env:
+          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+          JWT_SECRET: "test-secret-at-least-256-bits-used"
