@@ -1,7 +1,7 @@
 use diesel::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(diesel_derive_enum::DbEnum, Serialize, Debug, Clone, Copy, PartialEq)]
+#[derive(diesel_derive_enum::DbEnum, Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 #[ExistingTypePath = "crate::database::schema::sql_types::UserRole"]
 #[DbValueStyle = "UPPERCASE"]
 #[serde(rename_all = "UPPERCASE")]
@@ -11,7 +11,7 @@ pub enum UserRole {
     Admin,
 }
 
-#[derive(Identifiable, AsChangeset, Queryable, Selectable, Serialize)]
+#[derive(Identifiable, AsChangeset, Queryable, Selectable, Serialize, Insertable, Debug)]
 #[diesel(table_name = crate::database::schema::users)]
 #[diesel(treat_none_as_null = true)]
 pub struct User {

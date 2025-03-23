@@ -1,10 +1,12 @@
-use crate::schema::LessonType::Break;
-use crate::schema::{Day, Lesson, LessonSubGroup, LessonTime, LessonType, ScheduleEntity};
 use crate::LessonParseResult::{Lessons, Street};
-use calamine::{open_workbook_from_rs, Reader, Xls};
+use crate::schema::LessonType::Break;
+use crate::schema::{
+    Day, Lesson, LessonSubGroup, LessonTime, LessonType, ParseResult, ScheduleEntry,
+};
+use calamine::{Reader, Xls, open_workbook_from_rs};
 use chrono::{Duration, NaiveDateTime};
-use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
+use fuzzy_matcher::skim::SkimMatcherV2;
 use regex::Regex;
 use std::collections::HashMap;
 use std::io::Cursor;
@@ -471,9 +473,9 @@ fn parse_name_and_subgroups(name: &String) -> (String, Vec<LessonSubGroup>) {
 }
 
 fn convert_groups_to_teachers(
-    groups: &HashMap<String, ScheduleEntity>,
-) -> HashMap<String, ScheduleEntity> {
-    let mut teachers: HashMap<String, ScheduleEntity> = HashMap::new();
+    groups: &HashMap<String, ScheduleEntry>,
+) -> HashMap<String, ScheduleEntry> {
+    let mut teachers: HashMap<String, ScheduleEntry> = HashMap::new();
 
     let empty_days: Vec<Day> = groups
         .values()
@@ -510,7 +512,7 @@ fn convert_groups_to_teachers(
                     if !teachers.contains_key(&subgroup.teacher) {
                         teachers.insert(
                             subgroup.teacher.clone(),
-                            ScheduleEntity {
+                            ScheduleEntry {
                                 name: subgroup.teacher.clone(),
                                 days: empty_days.to_vec(),
                             },
@@ -538,12 +540,7 @@ fn convert_groups_to_teachers(
     teachers
 }
 
-pub fn parse_xls(
-    buffer: &Vec<u8>,
-) -> (
-    HashMap<String, ScheduleEntity>,
-    HashMap<String, ScheduleEntity>,
-) {
+pub fn parse_xls(buffer: &Vec<u8>) -> ParseResult {
     let cursor = Cursor::new(&buffer);
     let mut workbook: Xls<_> = open_workbook_from_rs(cursor).expect("Can't open workbook");
 
@@ -556,13 +553,13 @@ pub fn parse_xls(
 
     let (days_markup, groups_markup) = parse_skeleton(&worksheet);
 
-    let mut groups: HashMap<String, ScheduleEntity> = HashMap::new();
+    let mut groups: HashMap<String, ScheduleEntry> = HashMap::new();
     let mut days_times: Vec<Vec<InternalTime>> = Vec::new();
 
     let saturday_end_row = worksheet.end().unwrap().0;
 
     for group_markup in groups_markup {
-        let mut group = ScheduleEntity {
+        let mut group = ScheduleEntry {
             name: group_markup.name,
             days: Vec::new(),
         };
@@ -686,7 +683,10 @@ pub fn parse_xls(
         groups.insert(group.name.clone(), group);
     }
 
-    (convert_groups_to_teachers(&groups), groups)
+    ParseResult {
+        teachers: convert_groups_to_teachers(&groups),
+        groups,
+    }
 }
 
 #[cfg(test)]
@@ -698,7 +698,7 @@ mod tests {
         let buffer: Vec<u8> = include_bytes!("../../../../schedule.xls").to_vec();
         let result = parse_xls(&buffer);
 
-        assert_ne!(result.0.len(), 0);
-        assert_ne!(result.1.len(), 0);
+        assert_ne!(result.groups.len(), 0);
+        assert_ne!(result.teachers.len(), 0);
     }
 }

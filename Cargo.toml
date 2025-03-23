@@ -8,16 +8,20 @@ edition = "2024"
 publish = false
 
 [dependencies]
+actix-http = "3.10.0"
+actix-web = "4.10.2"
 bcrypt = "0.17.0"
-jwt = "0.16.0"
-hmac = "0.12.1"
-sha2 = "0.10.8"
+chrono = "0.4.40"
 diesel = { version = "2.2.8", features = ["postgres"] }
 diesel-derive-enum = { git = "https://github.com/Havunen/diesel-derive-enum.git", features = ["postgres"] }
 dotenvy = "0.15.7"
-serde = { version = "1.0.219", features = ["derive"] }
-schedule_parser = { path = "./lib/schedule_parser" }
-chrono = "0.4.40"
+hmac = "0.12.1"
+jwt = "0.16.0"
+mime = "0.3.17"
+objectid = "0.2.0"
 reqwest = "0.12.15"
+schedule_parser = { path = "./lib/schedule_parser" }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+sha2 = "0.10.8"
 tokio = { version = "1.44.1", features = ["macros", "rt-multi-thread"] }
-actix-web = "4.10.2"

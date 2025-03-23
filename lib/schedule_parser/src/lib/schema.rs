@@ -24,84 +24,104 @@ pub enum LessonType {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LessonSubGroup {
+    /**
+     * Номер подгруппы.
+     */
     pub number: u8,
 
+    /**
+     * Кабинет, если присутствует.
+     */
     pub cabinet: Option<String>,
 
+    /**
+     * Фио преподавателя.
+     */
     pub teacher: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Lesson {
     /**
-     * Тип занятия
+     * Тип занятия.
      */
     #[serde(rename = "type")]
     pub lesson_type: LessonType,
 
     /**
-     * Индексы пар, если присутствуют
+     * Индексы пар, если присутствуют.
      */
     #[serde(rename = "defaultRange")]
     pub default_range: Option<[u8; 2]>,
 
     /**
-     * Название занятия
+     * Название занятия.
      */
     pub name: Option<String>,
 
     /**
-     * Начало и конец занятия
+     * Начало и конец занятия.
      */
     pub time: LessonTime,
 
     /**
-     * Подгруппы
+     * Подгруппы.
      */
     #[serde(rename = "subGroups")]
     pub subgroups: Option<Vec<LessonSubGroup>>,
 
     /**
-     * Группа (только для расписания преподавателей)
+     * Группа, если это расписание для преподавателей.
      */
     pub group: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Day {
+    /**
+     * День недели.
+     */
     pub name: String,
 
+    /**
+     * Адрес другого корпуса.
+     */
     pub street: Option<String>,
 
+    /**
+     * Дата.
+     */
     pub date: DateTime<Utc>,
 
+    /**
+     * Список пар в этот день.
+     */
     pub lessons: Vec<Lesson>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ScheduleEntity {
+pub struct ScheduleEntry {
+    /**
+     * Название группы или ФИО преподавателя.
+     */
     pub name: String,
 
+    /**
+     * Список из шести дней.
+     */
     pub days: Vec<Day>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Schedule {
-    #[serde(rename = "updatedAt")]
-    pub updated_at: DateTime<Utc>,
+pub struct ParseResult {
+    /**
+     * Список групп.
+     * Ключом является название группы.
+     */
+    pub groups: HashMap<String, ScheduleEntry>,
 
-    pub groups: HashMap<String, ScheduleEntity>,
-
-    #[serde(rename = "updatedGroups")]
-    pub updated_groups: Vec<Vec<usize>>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct TeacherSchedule {
-    #[serde(rename = "updatedAt")]
-    pub updated_at: DateTime<Utc>,
-
-    pub teacher: ScheduleEntity,
-
-    pub updated: Vec<usize>,
+    /**
+     * Список преподавателей.
+     * Ключом является ФИО преподавателя.
+     */
+    pub teachers: HashMap<String, ScheduleEntry>,
 }
