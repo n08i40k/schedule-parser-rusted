@@ -1,88 +1,91 @@
-use chrono::DateTime;
 use chrono::Duration;
-use chrono::TimeZone;
 use chrono::Utc;
-use hmac::{Hmac, Mac};
-use jwt::{SignWithKey, Token, VerifyWithKey};
-use sha2::Sha256;
-use std::collections::BTreeMap;
+use jsonwebtoken::errors::ErrorKind;
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode};
+use serde::{Deserialize, Serialize};
+use serde_with::DisplayFromStr;
+use serde_with::serde_as;
 use std::env;
 use std::mem::discriminant;
 use std::sync::LazyLock;
 
-static JWT_SECRET: LazyLock<Hmac<Sha256>> = LazyLock::new(|| {
+static DECODING_KEY: LazyLock<DecodingKey> = LazyLock::new(|| {
     let secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
 
-    Hmac::new_from_slice(secret.as_bytes()).expect("Hmac::new_from_slice failed")
+    DecodingKey::from_secret(secret.as_bytes())
+});
+
+static ENCODING_KEY: LazyLock<EncodingKey> = LazyLock::new(|| {
+    let secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+
+    EncodingKey::from_secret(secret.as_bytes())
 });
 
 #[derive(Debug)]
-pub enum VerifyError {
-    JwtError(jwt::Error),
+pub enum Error {
     InvalidSignature,
-    InvalidToken,
+    InvalidToken(ErrorKind),
     Expired,
 }
 
-impl PartialEq for VerifyError {
+impl PartialEq for Error {
     fn eq(&self, other: &Self) -> bool {
         discriminant(self) == discriminant(other)
     }
 }
 
-pub fn verify_and_decode(token: &String) -> Result<String, VerifyError> {
-    let jwt = &*JWT_SECRET;
+#[serde_as]
+#[derive(Debug, Serialize, Deserialize)]
+struct Claims {
+    id: String,
+    #[serde_as(as = "DisplayFromStr")]
+    iat: u64,
+    #[serde_as(as = "DisplayFromStr")]
+    exp: u64,
+}
 
-    let result: Result<BTreeMap<String, String>, jwt::Error> = token.verify_with_key(jwt);
+pub(crate) const DEFAULT_ALGORITHM: Algorithm = Algorithm::HS256;
+
+pub fn verify_and_decode(token: &String) -> Result<String, Error> {
+    let mut validation = Validation::new(DEFAULT_ALGORITHM);
+
+    validation.required_spec_claims.remove("exp");
+    validation.validate_exp = false;
+
+    let result = decode::<Claims>(&token, &*DECODING_KEY, &validation);
 
     match result {
-        Ok(claims) => {
-            let exp = claims.get("exp").unwrap();
-            let exp_date = DateTime::from_timestamp(exp.parse::<i64>().unwrap(), 0)
-                .expect("Failed to parse expiration time");
-
-            if Utc::now() > exp_date {
-                return Err(VerifyError::Expired);
+        Ok(token_data) => {
+            if token_data.claims.exp < Utc::now().timestamp().unsigned_abs() {
+                Err(Error::Expired)
+            } else {
+                Ok(token_data.claims.id)
             }
-
-            Ok(claims.get("id").cloned().unwrap())
         }
-        Err(err) => Err(match err {
-            jwt::Error::InvalidSignature | jwt::Error::RustCryptoMac(_) => {
-                VerifyError::InvalidSignature
-            }
-            jwt::Error::Format | jwt::Error::Base64(_) | jwt::Error::NoClaimsComponent => {
-                VerifyError::InvalidToken
-            }
-
-            _ => VerifyError::JwtError(err),
+        Err(err) => Err(match err.into_kind() {
+            ErrorKind::InvalidSignature => Error::InvalidSignature,
+            ErrorKind::ExpiredSignature => Error::Expired,
+            kind => Error::InvalidToken(kind),
         }),
     }
 }
 
 pub fn encode(id: &String) -> String {
-    let header = jwt::Header {
-        type_: Some(jwt::header::HeaderType::JsonWebToken),
+    let header = Header {
+        typ: Some(String::from("JWT")),
         ..Default::default()
     };
-
-    let mut claims = BTreeMap::new();
 
     let iat = Utc::now();
     let exp = iat + Duration::days(365 * 4);
 
-    let iat_str = iat.timestamp().to_string();
-    let exp_str = exp.timestamp().to_string();
+    let claims = Claims {
+        id: id.clone(),
+        iat: iat.timestamp().unsigned_abs(),
+        exp: exp.timestamp().unsigned_abs(),
+    };
 
-    claims.insert("id", id.as_str());
-    claims.insert("iat", iat_str.as_str());
-    claims.insert("exp", exp_str.as_str());
-
-    Token::new(header, claims)
-        .sign_with_key(&*JWT_SECRET)
-        .unwrap()
-        .as_str()
-        .to_string()
+    jsonwebtoken::encode(&header, &claims, &*ENCODING_KEY).unwrap()
 }
 
 #[cfg(test)]
@@ -105,7 +108,10 @@ mod tests {
         let result = verify_and_decode(&token);
 
         assert!(result.is_err());
-        assert_eq!(result.err().unwrap(), VerifyError::InvalidToken);
+        assert_eq!(
+            result.err().unwrap(),
+            Error::InvalidToken(ErrorKind::InvalidToken)
+        );
     }
 
     #[test]
@@ -116,7 +122,7 @@ mod tests {
         let result = verify_and_decode(&token);
 
         assert!(result.is_err());
-        assert_eq!(result.err().unwrap(), VerifyError::InvalidSignature);
+        assert_eq!(result.err().unwrap(), Error::InvalidSignature);
     }
 
     #[test]
@@ -127,7 +133,7 @@ mod tests {
         let result = verify_and_decode(&token);
 
         assert!(result.is_err());
-        assert_eq!(result.err().unwrap(), VerifyError::Expired);
+        assert_eq!(result.err().unwrap(), Error::Expired);
     }
 
     #[test]

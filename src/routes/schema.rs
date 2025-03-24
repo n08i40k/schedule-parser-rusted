@@ -1,39 +1,37 @@
-pub mod shared {
-    use actix_web::body::EitherBody;
-    use actix_web::error::JsonPayloadError;
-    use actix_web::http::StatusCode;
-    use actix_web::{HttpRequest, HttpResponse, Responder};
-    use serde::Serialize;
+use actix_web::body::EitherBody;
+use actix_web::error::JsonPayloadError;
+use actix_web::http::StatusCode;
+use actix_web::{HttpRequest, HttpResponse, Responder};
+use serde::Serialize;
 
-    pub struct IResponse<T: Serialize, E: Serialize>(pub Result<T, E>);
+pub struct IResponse<T: Serialize, E: Serialize>(pub Result<T, E>);
 
-    pub trait ErrorToHttpCode {
-        fn to_http_status_code(&self) -> StatusCode;
-    }
+pub trait ErrorToHttpCode {
+    fn to_http_status_code(&self) -> StatusCode;
+}
 
-    impl<T: Serialize, E: Serialize + ErrorToHttpCode> Responder for IResponse<T, E> {
-        type Body = EitherBody<String>;
+impl<T: Serialize, E: Serialize + ErrorToHttpCode> Responder for IResponse<T, E> {
+    type Body = EitherBody<String>;
 
-        fn respond_to(self, _: &HttpRequest) -> HttpResponse<Self::Body> {
-            match serde_json::to_string(&self.0) {
-                Ok(body) => {
-                    let code = match &self.0 {
-                        Ok(_) => StatusCode::OK,
-                        Err(e) => e.to_http_status_code(),
-                    };
+    fn respond_to(self, _: &HttpRequest) -> HttpResponse<Self::Body> {
+        match serde_json::to_string(&self.0) {
+            Ok(body) => {
+                let code = match &self.0 {
+                    Ok(_) => StatusCode::OK,
+                    Err(e) => e.to_http_status_code(),
+                };
 
-                    match HttpResponse::build(code)
-                        .content_type(mime::APPLICATION_JSON)
-                        .message_body(body)
-                    {
-                        Ok(res) => res.map_into_left_body(),
-                        Err(err) => HttpResponse::from_error(err).map_into_right_body(),
-                    }
+                match HttpResponse::build(code)
+                    .content_type(mime::APPLICATION_JSON)
+                    .message_body(body)
+                {
+                    Ok(res) => res.map_into_left_body(),
+                    Err(err) => HttpResponse::from_error(err).map_into_right_body(),
                 }
+            }
 
-                Err(err) => {
-                    HttpResponse::from_error(JsonPayloadError::Serialize(err)).map_into_right_body()
-                }
+            Err(err) => {
+                HttpResponse::from_error(JsonPayloadError::Serialize(err)).map_into_right_body()
             }
         }
     }

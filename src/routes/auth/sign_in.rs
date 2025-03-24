@@ -1,47 +1,138 @@
+use self::schema::*;
 use crate::database::driver;
 use crate::database::models::User;
-use crate::routes::auth::schema;
-use crate::{AppState, utility};
+use crate::routes::auth::shared::parse_vk_id;
+use crate::routes::auth::sign_in::schema::ErrorCode;
+use crate::routes::auth::sign_in::schema::SignInData::{Default, Vk};
+use crate::{utility, AppState};
 use actix_web::{post, web};
 use diesel::SaveChangesDsl;
 use std::ops::DerefMut;
 use web::Json;
 
-#[post("/sign-in")]
-pub async fn sign_in(
-    data: Json<schema::sign_in::Request>,
-    app_state: web::Data<AppState>,
-) -> schema::sign_in::Response {
-    use schema::sign_in::*;
+async fn sign_in(data: SignInData, app_state: &web::Data<AppState>) -> Response {
+    let user = match &data {
+        Default(data) => driver::users::get_by_username(&app_state.database, &data.username),
+        Vk(id) => driver::users::get_by_vk_id(&app_state.database, *id),
+    };
 
-    match driver::users::get_by_username(&app_state.database, data.username.clone()) {
-        Ok(mut user) => match bcrypt::verify(&data.password, &user.password) {
-            Ok(true) => {
-                let mut lock = app_state.connection();
-                let conn = lock.deref_mut();
-
-                user.access_token = utility::jwt::encode(&user.id);
-
-                user.save_changes::<User>(conn)
-                    .expect("Failed to update user");
-
-                Response::ok(&user)
+    match user {
+        Ok(mut user) => {
+            if let Default(data) = data {
+                match bcrypt::verify(&data.password, &user.password) {
+                    Ok(result) => {
+                        if !result {
+                            return Response::err(ErrorCode::IncorrectCredentials);
+                        }
+                    }
+                    Err(_) => {
+                        return Response::err(ErrorCode::IncorrectCredentials);
+                    }
+                }
             }
-            Ok(false) | Err(_) => Response::err(ErrorCode::IncorrectCredentials),
-        },
+
+            let mut lock = app_state.connection();
+            let conn = lock.deref_mut();
+
+            user.access_token = utility::jwt::encode(&user.id);
+
+            user.save_changes::<User>(conn)
+                .expect("Failed to update user");
+
+            Response::ok(&user)
+        }
 
         Err(_) => Response::err(ErrorCode::IncorrectCredentials),
     }
 }
 
+#[post("/sign-in")]
+pub async fn sign_in_default(data: Json<Request>, app_state: web::Data<AppState>) -> Response {
+    sign_in(Default(data.into_inner()), &app_state).await
+}
+
+#[post("/sign-in-vk")]
+pub async fn sign_in_vk(data_json: Json<vk::Request>, app_state: web::Data<AppState>) -> Response {
+    let data = data_json.into_inner();
+
+    match parse_vk_id(&data.access_token) {
+        Ok(id) => sign_in(Vk(id), &app_state).await,
+        Err(_) => Response::err(ErrorCode::InvalidVkAccessToken),
+    }
+}
+
+mod schema {
+    use crate::database::models::User;
+    use crate::routes::schema::{user, ErrorToHttpCode, IResponse};
+    use actix_web::http::StatusCode;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Deserialize, Serialize)]
+    pub struct Request {
+        pub username: String,
+        pub password: String,
+    }
+
+    pub mod vk {
+        use serde::{Deserialize, Serialize};
+
+        #[derive(Serialize, Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        pub struct Request {
+            pub access_token: String,
+        }
+    }
+
+    pub type Response = IResponse<user::ResponseOk, ResponseErr>;
+
+    #[derive(Serialize)]
+    pub struct ResponseErr {
+        code: ErrorCode,
+    }
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+    pub enum ErrorCode {
+        IncorrectCredentials,
+        InvalidVkAccessToken,
+    }
+
+    pub trait ResponseExt {
+        fn ok(user: &User) -> Self;
+        fn err(code: ErrorCode) -> Response;
+    }
+
+    impl ResponseExt for Response {
+        fn ok(user: &User) -> Self {
+            IResponse(Ok(user::ResponseOk::from_user(&user)))
+        }
+
+        fn err(code: ErrorCode) -> Response {
+            IResponse(Err(ResponseErr { code }))
+        }
+    }
+
+    impl ErrorToHttpCode for ResponseErr {
+        fn to_http_status_code(&self) -> StatusCode {
+            StatusCode::NOT_ACCEPTABLE
+        }
+    }
+
+    /// Internal
+
+    pub enum SignInData {
+        Default(Request),
+        Vk(i32),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::app_state::app_state;
+    use super::schema::*;
     use crate::database::driver;
     use crate::database::models::{User, UserRole};
-    use crate::routes::auth::schema;
-    use crate::routes::auth::sign_in::sign_in;
-    use crate::test_env::tests::{static_app_state, test_app, test_env};
+    use crate::routes::auth::sign_in::sign_in_default;
+    use crate::test_env::tests::{static_app_state, test_app, test_app_state, test_env};
     use crate::utility;
     use actix_http::StatusCode;
     use actix_web::dev::ServiceResponse;
@@ -50,8 +141,8 @@ mod tests {
     use sha2::{Digest, Sha256};
     use std::fmt::Write;
 
-    async fn sign_in_client(data: schema::sign_in::Request) -> ServiceResponse {
-        let app = test_app(app_state(), sign_in).await;
+    async fn sign_in_client(data: Request) -> ServiceResponse {
+        let app = test_app(test_app_state(), sign_in_default).await;
 
         let req = test::TestRequest::with_uri("/sign-in")
             .method(Method::POST)
@@ -100,7 +191,7 @@ mod tests {
     async fn sign_in_ok() {
         prepare("test::sign_in_ok".to_string());
 
-        let resp = sign_in_client(schema::sign_in::Request {
+        let resp = sign_in_client(Request {
             username: "test::sign_in_ok".to_string(),
             password: "example".to_string(),
         })
@@ -113,7 +204,7 @@ mod tests {
     async fn sign_in_err() {
         prepare("test::sign_in_err".to_string());
 
-        let invalid_username = sign_in_client(schema::sign_in::Request {
+        let invalid_username = sign_in_client(Request {
             username: "test::sign_in_err::username".to_string(),
             password: "example".to_string(),
         })
@@ -121,7 +212,7 @@ mod tests {
 
         assert_eq!(invalid_username.status(), StatusCode::NOT_ACCEPTABLE);
 
-        let invalid_password = sign_in_client(schema::sign_in::Request {
+        let invalid_password = sign_in_client(Request {
             username: "test::sign_in_err".to_string(),
             password: "bad_password".to_string(),
         })

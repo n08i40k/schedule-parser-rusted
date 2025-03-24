@@ -1,6 +1,6 @@
-use crate::LessonParseResult::{Lessons, Street};
-use crate::schema::LessonType::Break;
-use crate::schema::{
+use crate::parser::LessonParseResult::{Lessons, Street};
+use crate::parser::schema::LessonType::Break;
+use crate::parser::schema::{
     Day, Lesson, LessonSubGroup, LessonTime, LessonType, ParseResult, ScheduleEntry,
 };
 use calamine::{Reader, Xls, open_workbook_from_rs};
@@ -690,13 +690,18 @@ pub fn parse_xls(buffer: &Vec<u8>) -> ParseResult {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
+
+    pub fn test_result() -> ParseResult {
+        let buffer: Vec<u8> = include_bytes!("../../schedule.xls").to_vec();
+
+        parse_xls(&buffer)
+    }
 
     #[test]
     fn read() {
-        let buffer: Vec<u8> = include_bytes!("../../../../schedule.xls").to_vec();
-        let result = parse_xls(&buffer);
+        let result = test_result();
 
         assert_ne!(result.groups.len(), 0);
         assert_ne!(result.teachers.len(), 0);
