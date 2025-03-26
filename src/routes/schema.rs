@@ -2,7 +2,7 @@ use actix_web::body::EitherBody;
 use actix_web::error::JsonPayloadError;
 use actix_web::http::StatusCode;
 use actix_web::{HttpRequest, HttpResponse, Responder};
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 
 pub struct IResponse<T: Serialize, E: Serialize>(pub Result<T, E>);
 
@@ -10,11 +10,29 @@ pub trait ErrorToHttpCode {
     fn to_http_status_code(&self) -> StatusCode;
 }
 
+impl<T: Serialize, E: Serialize> IResponse<T, E> {
+    pub fn new(result: Result<T, E>) -> Self {
+        IResponse(result)
+    }
+}
+
+impl<T: Serialize, E: Serialize> Serialize for IResponse<T, E> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match &self.0 {
+            Ok(ok) => serializer.serialize_some::<T>(&ok),
+            Err(err) => serializer.serialize_some::<E>(&err),
+        }
+    }
+}
+
 impl<T: Serialize, E: Serialize + ErrorToHttpCode> Responder for IResponse<T, E> {
     type Body = EitherBody<String>;
 
     fn respond_to(self, _: &HttpRequest) -> HttpResponse<Self::Body> {
-        match serde_json::to_string(&self.0) {
+        match serde_json::to_string(&self) {
             Ok(body) => {
                 let code = match &self.0 {
                     Ok(_) => StatusCode::OK,

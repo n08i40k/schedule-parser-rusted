@@ -132,14 +132,15 @@ mod tests {
     use crate::database::driver;
     use crate::database::models::{User, UserRole};
     use crate::routes::auth::sign_in::sign_in_default;
-    use crate::test_env::tests::{static_app_state, test_app, test_app_state, test_env};
+    use crate::test_env::tests::{static_app_state, test_app_state, test_env};
     use crate::utility;
-    use actix_http::StatusCode;
+    use actix_web::http::StatusCode;
     use actix_web::dev::ServiceResponse;
     use actix_web::http::Method;
     use actix_web::test;
     use sha2::{Digest, Sha256};
     use std::fmt::Write;
+    use actix_test::test_app;
 
     async fn sign_in_client(data: Request) -> ServiceResponse {
         let app = test_app(test_app_state(), sign_in_default).await;

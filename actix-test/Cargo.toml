@@ -1,0 +1,8 @@
+[package]
+name = "actix-test"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+actix-http = "3.10.0"
+actix-web = "4.10.2"

@@ -1,23 +1,30 @@
 use crate::app_state::{AppState, app_state};
 use crate::routes::auth::sign_in::{sign_in_default, sign_in_vk};
 use crate::routes::auth::sign_up::{sign_up_default, sign_up_vk};
+use crate::routes::users::me::me;
 use actix_web::{App, HttpServer, web};
 use dotenvy::dotenv;
 
 mod app_state;
+
 mod database;
-mod routes;
-
-mod test_env;
-
-mod utility;
-mod xls_downloader;
 
 mod parser;
+mod xls_downloader;
+
+mod extractors;
+mod routes;
+
+mod utility;
+
+mod test_env;
 
 #[actix_web::main]
 async fn main() {
     dotenv().ok();
+
+    unsafe { std::env::set_var("RUST_LOG", "debug") };
+    env_logger::init();
 
     HttpServer::new(move || {
         let auth_scope = web::scope("/auth")
@@ -25,9 +32,13 @@ async fn main() {
             .service(sign_in_vk)
             .service(sign_up_default)
             .service(sign_up_vk);
-        let api_scope = web::scope("/api/v1").service(auth_scope);
+        let users_scope = web::scope("/users").service(me);
 
-        App::new().app_data(move || app_state()).service(api_scope)
+        let api_scope = web::scope("/api/v1")
+            .service(auth_scope)
+            .service(users_scope);
+
+        App::new().app_data(app_state()).service(api_scope)
     })
     .bind(("127.0.0.1", 8080))
     .unwrap()

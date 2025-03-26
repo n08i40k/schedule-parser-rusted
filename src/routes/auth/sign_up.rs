@@ -208,11 +208,12 @@ mod tests {
     use crate::database::models::UserRole;
     use crate::routes::auth::sign_up::schema::Request;
     use crate::routes::auth::sign_up::sign_up_default;
-    use crate::test_env::tests::{static_app_state, test_app, test_app_state, test_env};
-    use actix_http::StatusCode;
+    use crate::test_env::tests::{static_app_state, test_app_state, test_env};
+    use actix_web::http::StatusCode;
     use actix_web::dev::ServiceResponse;
     use actix_web::http::Method;
     use actix_web::test;
+    use actix_test::test_app;
 
     struct SignUpPartial {
         username: String,
