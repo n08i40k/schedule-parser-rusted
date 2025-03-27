@@ -10,19 +10,17 @@ use actix_web::{HttpRequest, web};
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
+use actix_web::http::header;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Display, ResponseErrorMessage)]
 #[status_code = "actix_web::http::StatusCode::UNAUTHORIZED"]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Error {
-    #[display("No authorization header found")]
+    #[display("No Authorization header found")]
     NoHeader,
 
     #[display("Bearer token is required")]
     UnknownAuthorizationType,
-
-    #[display("No bearer token provided")]
-    NoBearerToken,
 
     #[display("Invalid or expired access token")]
     InvalidAccessToken,
@@ -43,7 +41,7 @@ impl FromRequestSync for User {
     fn from_request_sync(req: &HttpRequest, _: &mut Payload) -> Result<Self, Self::Error> {
         let authorization = req
             .headers()
-            .get("Authorization")
+            .get(header::AUTHORIZATION)
             .ok_or(Error::NoHeader.into_err())?
             .to_str()
             .map_err(|_| Error::NoHeader.into_err())?
@@ -51,12 +49,8 @@ impl FromRequestSync for User {
 
         let parts: Vec<&str> = authorization.split(' ').collect();
 
-        if parts.len() == 0 || parts[0] != "Bearer" {
+        if parts.len() != 2 || parts[0] != "Bearer" {
             return Err(Error::UnknownAuthorizationType.into_err());
-        }
-
-        if parts.len() < 2 {
-            return Err(Error::NoBearerToken.into());
         }
 
         let user_id = jwt::verify_and_decode(&parts[1].to_string())

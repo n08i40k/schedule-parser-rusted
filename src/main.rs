@@ -1,8 +1,9 @@
-use crate::app_state::{AppState, app_state};
+use crate::app_state::{app_state, AppState};
+use crate::middlewares::authorization::Authorization;
 use crate::routes::auth::sign_in::{sign_in_default, sign_in_vk};
 use crate::routes::auth::sign_up::{sign_up_default, sign_up_vk};
 use crate::routes::users::me::me;
-use actix_web::{App, HttpServer, web};
+use actix_web::{web, App, HttpServer};
 use dotenvy::dotenv;
 
 mod app_state;
@@ -13,6 +14,7 @@ mod parser;
 mod xls_downloader;
 
 mod extractors;
+mod middlewares;
 mod routes;
 
 mod utility;
@@ -32,7 +34,10 @@ async fn main() {
             .service(sign_in_vk)
             .service(sign_up_default)
             .service(sign_up_vk);
-        let users_scope = web::scope("/users").service(me);
+
+        let users_scope = web::scope("/users")
+            .wrap(Authorization)
+            .service(me);
 
         let api_scope = web::scope("/api/v1")
             .service(auth_scope)
