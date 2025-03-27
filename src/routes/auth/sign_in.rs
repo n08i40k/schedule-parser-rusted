@@ -2,8 +2,9 @@ use self::schema::*;
 use crate::database::driver;
 use crate::database::models::User;
 use crate::routes::auth::shared::parse_vk_id;
-use crate::routes::auth::sign_in::schema::ErrorCode;
 use crate::routes::auth::sign_in::schema::SignInData::{Default, Vk};
+use crate::routes::schema::user::UserResponse;
+use crate::routes::schema::ResponseError;
 use crate::{utility, AppState};
 use actix_web::{post, web};
 use diesel::SaveChangesDsl;
@@ -22,11 +23,11 @@ async fn sign_in(data: SignInData, app_state: &web::Data<AppState>) -> Response 
                 match bcrypt::verify(&data.password, &user.password) {
                     Ok(result) => {
                         if !result {
-                            return Response::err(ErrorCode::IncorrectCredentials);
+                            return ErrorCode::IncorrectCredentials.into();
                         }
                     }
                     Err(_) => {
-                        return Response::err(ErrorCode::IncorrectCredentials);
+                        return ErrorCode::IncorrectCredentials.into();
                     }
                 }
             }
@@ -39,36 +40,46 @@ async fn sign_in(data: SignInData, app_state: &web::Data<AppState>) -> Response 
             user.save_changes::<User>(conn)
                 .expect("Failed to update user");
 
-            Response::ok(&user)
+            UserResponse::from(&user).into()
         }
 
-        Err(_) => Response::err(ErrorCode::IncorrectCredentials),
+        Err(_) => ErrorCode::IncorrectCredentials.into(),
     }
 }
 
+#[utoipa::path(responses(
+    (status = OK, body = UserResponse),
+    (status = NOT_ACCEPTABLE, body = ResponseError<ErrorCode>)
+))]
 #[post("/sign-in")]
 pub async fn sign_in_default(data: Json<Request>, app_state: web::Data<AppState>) -> Response {
     sign_in(Default(data.into_inner()), &app_state).await
 }
 
+#[utoipa::path(responses(
+    (status = OK, body = UserResponse),
+    (status = NOT_ACCEPTABLE, body = ResponseError<ErrorCode>)
+))]
 #[post("/sign-in-vk")]
 pub async fn sign_in_vk(data_json: Json<vk::Request>, app_state: web::Data<AppState>) -> Response {
     let data = data_json.into_inner();
 
     match parse_vk_id(&data.access_token) {
         Ok(id) => sign_in(Vk(id), &app_state).await,
-        Err(_) => Response::err(ErrorCode::InvalidVkAccessToken),
+        Err(_) => ErrorCode::InvalidVkAccessToken.into(),
     }
 }
 
 mod schema {
-    use crate::database::models::User;
-    use crate::routes::schema::{user, ErrorToHttpCode, IResponse};
+    use crate::routes::schema::user::UserResponse;
+    use crate::routes::schema::{HttpStatusCode, IResponse};
     use actix_web::http::StatusCode;
     use serde::{Deserialize, Serialize};
 
-    #[derive(Deserialize, Serialize)]
+    #[derive(Deserialize, Serialize, utoipa::ToSchema)]
+    #[schema(as = SignIn::Request)]
     pub struct Request {
+        #[schema(examples("n08i40k"))]
         pub username: String,
         pub password: String,
     }
@@ -76,44 +87,26 @@ mod schema {
     pub mod vk {
         use serde::{Deserialize, Serialize};
 
-        #[derive(Serialize, Deserialize)]
+        #[derive(Serialize, Deserialize, utoipa::ToSchema)]
         #[serde(rename_all = "camelCase")]
+        #[schema(as = SignInVk::Request)]
         pub struct Request {
             pub access_token: String,
         }
     }
 
-    pub type Response = IResponse<user::ResponseOk, ResponseErr>;
+    pub type Response = IResponse<UserResponse, ErrorCode>;
 
-    #[derive(Serialize)]
-    pub struct ResponseErr {
-        code: ErrorCode,
-    }
-
-    #[derive(Serialize)]
+    #[derive(Serialize, utoipa::ToSchema, Clone)]
     #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+    #[schema(as = SignIn::ErrorCode)]
     pub enum ErrorCode {
         IncorrectCredentials,
         InvalidVkAccessToken,
     }
 
-    pub trait ResponseExt {
-        fn ok(user: &User) -> Self;
-        fn err(code: ErrorCode) -> Response;
-    }
-
-    impl ResponseExt for Response {
-        fn ok(user: &User) -> Self {
-            IResponse(Ok(user::ResponseOk::from_user(&user)))
-        }
-
-        fn err(code: ErrorCode) -> Response {
-            IResponse(Err(ResponseErr { code }))
-        }
-    }
-
-    impl ErrorToHttpCode for ResponseErr {
-        fn to_http_status_code(&self) -> StatusCode {
+    impl HttpStatusCode for ErrorCode {
+        fn status_code(&self) -> StatusCode {
             StatusCode::NOT_ACCEPTABLE
         }
     }
@@ -134,13 +127,13 @@ mod tests {
     use crate::routes::auth::sign_in::sign_in_default;
     use crate::test_env::tests::{static_app_state, test_app_state, test_env};
     use crate::utility;
-    use actix_web::http::StatusCode;
+    use actix_test::test_app;
     use actix_web::dev::ServiceResponse;
     use actix_web::http::Method;
+    use actix_web::http::StatusCode;
     use actix_web::test;
     use sha2::{Digest, Sha256};
     use std::fmt::Write;
-    use actix_test::test_app;
 
     async fn sign_in_client(data: Request) -> ServiceResponse {
         let app = test_app(test_app_state(), sign_in_default).await;
