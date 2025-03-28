@@ -9,22 +9,31 @@ use std::env;
 use std::mem::discriminant;
 use std::sync::LazyLock;
 
+/// Ключ для верификации токена
 static DECODING_KEY: LazyLock<DecodingKey> = LazyLock::new(|| {
     let secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
 
     DecodingKey::from_secret(secret.as_bytes())
 });
 
+/// Ключ для создания подписанного токена
 static ENCODING_KEY: LazyLock<EncodingKey> = LazyLock::new(|| {
     let secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
 
     EncodingKey::from_secret(secret.as_bytes())
 });
 
+/// Ошибки верификации токена
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum Error {
+    /// Токен имеет другую подпись
     InvalidSignature,
+    
+    /// Ошибка чтения токена
     InvalidToken(ErrorKind),
+    
+    /// Токен просрочен
     Expired,
 }
 
@@ -34,18 +43,26 @@ impl PartialEq for Error {
     }
 }
 
+/// Данные, которые хранит в себе токен
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
+    /// UUID аккаунта пользователя
     id: String,
+    
+    /// Дата создания токена
     #[serde_as(as = "DisplayFromStr")]
     iat: u64,
+    
+    /// Дата окончания действия токена
     #[serde_as(as = "DisplayFromStr")]
     exp: u64,
 }
 
+/// Алгоритм подписи токенов
 pub(crate) const DEFAULT_ALGORITHM: Algorithm = Algorithm::HS256;
 
+/// Проверка токена и извлечение из него UUID аккаунта пользователя 
 pub fn verify_and_decode(token: &String) -> Result<String, Error> {
     let mut validation = Validation::new(DEFAULT_ALGORITHM);
 
@@ -70,6 +87,7 @@ pub fn verify_and_decode(token: &String) -> Result<String, Error> {
     }
 }
 
+/// Создание токена пользователя
 pub fn encode(id: &String) -> String {
     let header = Header {
         typ: Some(String::from("JWT")),

@@ -15,9 +15,10 @@ pub(crate) mod tests {
 
         *schedule_lock = Some(Schedule {
             etag: "".to_string(),
+            fetched_at: Default::default(),
             updated_at: Default::default(),
             parsed_at: Default::default(),
-            data: test_result(),
+            data: test_result().unwrap(),
         });
 
         state.clone()

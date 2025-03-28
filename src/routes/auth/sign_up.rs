@@ -50,7 +50,10 @@ async fn sign_up(
     (status = NOT_ACCEPTABLE, body = ResponseError<ErrorCode>)
 ))]
 #[post("/sign-up")]
-pub async fn sign_up_default(data_json: Json<Request>, app_state: web::Data<AppState>) -> Response {
+pub async fn sign_up_default(
+    data_json: Json<Request>,
+    app_state: web::Data<AppState>,
+) -> ServiceResponse {
     let data = data_json.into_inner();
 
     sign_up(
@@ -73,7 +76,10 @@ pub async fn sign_up_default(data_json: Json<Request>, app_state: web::Data<AppS
     (status = NOT_ACCEPTABLE, body = ResponseError<ErrorCode>)
 ))]
 #[post("/sign-up-vk")]
-pub async fn sign_up_vk(data_json: Json<vk::Request>, app_state: web::Data<AppState>) -> Response {
+pub async fn sign_up_vk(
+    data_json: Json<vk::Request>,
+    app_state: web::Data<AppState>,
+) -> ServiceResponse {
     let data = data_json.into_inner();
 
     match parse_vk_id(&data.access_token) {
@@ -107,11 +113,9 @@ pub async fn sign_up_vk(data_json: Json<vk::Request>, app_state: web::Data<AppSt
 
 mod schema {
     use crate::database::models::{User, UserRole};
-    use crate::routes::schema::PartialStatusCode;
     use crate::routes::schema::user::UserResponse;
     use crate::utility;
     use actix_macros::{IntoResponseError, StatusCode};
-    use actix_web::http::StatusCode;
     use objectid::ObjectId;
     use serde::{Deserialize, Serialize};
 
@@ -120,16 +124,21 @@ mod schema {
     #[derive(Serialize, Deserialize, utoipa::ToSchema)]
     #[schema(as = SignUp::Request)]
     pub struct Request {
+        /// Имя пользователя
         #[schema(examples("n08i40k"))]
         pub username: String,
 
+        /// Пароль
         pub password: String,
 
+        /// Группа
         #[schema(examples("ИС-214/23"))]
         pub group: String,
 
+        /// Роль
         pub role: UserRole,
 
+        /// Версия установленного приложения Polytechnic+
         #[schema(examples("3.0.0"))]
         pub version: String,
     }
@@ -142,43 +151,71 @@ mod schema {
         #[serde(rename_all = "camelCase")]
         #[schema(as = SignUpVk::Request)]
         pub struct Request {
+            /// Токен VK ID
             pub access_token: String,
 
+            /// Имя пользователя
             #[schema(examples("n08i40k"))]
             pub username: String,
 
+            /// Группа
             #[schema(examples("ИС-214/23"))]
             pub group: String,
 
+            /// Роль
             pub role: UserRole,
 
+            /// Версия установленного приложения Polytechnic+
             #[schema(examples("3.0.0"))]
             pub version: String,
         }
     }
 
-    pub type Response = crate::routes::schema::Response<UserResponse, ErrorCode>;
+    pub type ServiceResponse = crate::routes::schema::Response<UserResponse, ErrorCode>;
 
     #[derive(Clone, Serialize, utoipa::ToSchema, IntoResponseError, StatusCode)]
-    #[status_code = "StatusCode::NOT_ACCEPTABLE"]
     #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
     #[schema(as = SignUp::ErrorCode)]
+    #[status_code = "actix_web::http::StatusCode::NOT_ACCEPTABLE"]
     pub enum ErrorCode {
+        /// Передана роль ADMIN
         DisallowedRole,
+
+        /// Неизвестное название группы
         InvalidGroupName,
+
+        /// Пользователь с таким именем уже зарегистрирован
         UsernameAlreadyExists,
+
+        /// Недействительный токен VK ID
         InvalidVkAccessToken,
+
+        /// Пользователь с таким аккаунтом VK уже зарегистрирован
         VkAlreadyExists,
     }
 
     /// Internal
 
+    /// Данные для регистрации
     pub struct SignUpData {
+        /// Имя пользователя
         pub username: String,
+
+        /// Пароль
+        ///
+        /// Должен присутствовать даже если регистрация происходит с помощью токена VK ID
         pub password: String,
+
+        /// Идентификатор аккаунта VK
         pub vk_id: Option<i32>,
+
+        /// Группа
         pub group: String,
+
+        /// Роль
         pub role: UserRole,
+
+        /// Версия установленного приложения Polytechnic+
         pub version: String,
     }
 

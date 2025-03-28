@@ -5,7 +5,7 @@ use crate::routes::auth::shared::parse_vk_id;
 use crate::routes::auth::sign_in::schema::SignInData::{Default, Vk};
 use crate::routes::schema::user::UserResponse;
 use crate::routes::schema::{IntoResponseAsError, ResponseError};
-use crate::{AppState, utility};
+use crate::{utility, AppState};
 use actix_web::{post, web};
 use diesel::SaveChangesDsl;
 use std::ops::DerefMut;
@@ -55,7 +55,7 @@ async fn sign_in(
     (status = NOT_ACCEPTABLE, body = ResponseError<ErrorCode>)
 ))]
 #[post("/sign-in")]
-pub async fn sign_in_default(data: Json<Request>, app_state: web::Data<AppState>) -> Response {
+pub async fn sign_in_default(data: Json<Request>, app_state: web::Data<AppState>) -> ServiceResponse {
     sign_in(Default(data.into_inner()), &app_state).await.into()
 }
 
@@ -64,7 +64,7 @@ pub async fn sign_in_default(data: Json<Request>, app_state: web::Data<AppState>
     (status = NOT_ACCEPTABLE, body = ResponseError<ErrorCode>)
 ))]
 #[post("/sign-in-vk")]
-pub async fn sign_in_vk(data_json: Json<vk::Request>, app_state: web::Data<AppState>) -> Response {
+pub async fn sign_in_vk(data_json: Json<vk::Request>, app_state: web::Data<AppState>) -> ServiceResponse {
     let data = data_json.into_inner();
 
     match parse_vk_id(&data.access_token) {
@@ -74,51 +74,57 @@ pub async fn sign_in_vk(data_json: Json<vk::Request>, app_state: web::Data<AppSt
 }
 
 mod schema {
-    use crate::routes::schema::PartialStatusCode;
     use crate::routes::schema::user::UserResponse;
-    use actix_macros::IntoResponseError;
-    use actix_web::http::StatusCode;
+    use actix_macros::{IntoResponseError, StatusCode};
     use serde::{Deserialize, Serialize};
+    use utoipa::ToSchema;
 
-    #[derive(Deserialize, Serialize, utoipa::ToSchema)]
+    #[derive(Deserialize, Serialize, ToSchema)]
     #[schema(as = SignIn::Request)]
     pub struct Request {
+        /// Имя пользователя
         #[schema(examples("n08i40k"))]
         pub username: String,
+        
+        /// Пароль
         pub password: String,
     }
 
     pub mod vk {
         use serde::{Deserialize, Serialize};
+        use utoipa::ToSchema;
 
-        #[derive(Serialize, Deserialize, utoipa::ToSchema)]
+        #[derive(Serialize, Deserialize, ToSchema)]
         #[serde(rename_all = "camelCase")]
         #[schema(as = SignInVk::Request)]
         pub struct Request {
+            /// Токен VK ID
             pub access_token: String,
         }
     }
 
-    pub type Response = crate::routes::schema::Response<UserResponse, ErrorCode>;
+    pub type ServiceResponse = crate::routes::schema::Response<UserResponse, ErrorCode>;
 
-    #[derive(Serialize, utoipa::ToSchema, Clone, IntoResponseError)]
+    #[derive(Serialize, ToSchema, Clone, IntoResponseError, StatusCode)]
     #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
     #[schema(as = SignIn::ErrorCode)]
+    #[status_code = "actix_web::http::StatusCode::NOT_ACCEPTABLE"]
     pub enum ErrorCode {
+        /// Некорректное имя пользователя или пароль
         IncorrectCredentials,
+        
+        /// Недействительный токен VK ID
         InvalidVkAccessToken,
-    }
-
-    impl PartialStatusCode for ErrorCode {
-        fn status_code(&self) -> StatusCode {
-            StatusCode::NOT_ACCEPTABLE
-        }
     }
 
     /// Internal
 
+    /// Тип авторизации
     pub enum SignInData {
+        /// Имя пользователя и пароль
         Default(Request),
+        
+        /// Идентификатор привязанного аккаунта VK 
         Vk(i32),
     }
 }
@@ -136,7 +142,7 @@ mod tests {
     use actix_web::http::Method;
     use actix_web::http::StatusCode;
     use actix_web::test;
-    use sha2::{Digest, Sha256};
+    use sha1::{Digest, Sha1};
     use std::fmt::Write;
 
     async fn sign_in_client(data: Request) -> ServiceResponse {
@@ -152,7 +158,7 @@ mod tests {
 
     fn prepare(username: String) {
         let id = {
-            let mut sha = Sha256::new();
+            let mut sha = Sha1::new();
             sha.update(&username);
 
             let result = sha.finalize();

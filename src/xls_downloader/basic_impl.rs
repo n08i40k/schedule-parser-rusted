@@ -2,7 +2,7 @@ use crate::xls_downloader::interface::{FetchError, FetchOk, FetchResult, XLSDown
 use chrono::{DateTime, Utc};
 
 pub struct BasicXlsDownloader {
-    url: Option<String>,
+    pub url: Option<String>,
 }
 
 async fn fetch_specified(url: &String, user_agent: String, head: bool) -> FetchResult {
@@ -73,14 +73,14 @@ impl XLSDownloader for BasicXlsDownloader {
         }
     }
 
-    async fn set_url(&mut self, url: String) -> Result<(), FetchError> {
+    async fn set_url(&mut self, url: String) -> FetchResult {
         let result = fetch_specified(&url, "t.me/polytechnic_next".to_string(), true).await;
 
         if let Ok(_) = result {
-            Ok(self.url = Some(url))
-        } else {
-            Err(result.err().unwrap())
+            self.url = Some(url);
         }
+
+        result
     }
 }
 

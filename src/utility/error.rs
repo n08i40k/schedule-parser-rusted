@@ -2,6 +2,7 @@ use std::fmt::{Write};
 use std::fmt::Display;
 use serde::{Deserialize, Serialize};
 
+/// Ответ от сервера при ошибках внутри Middleware
 #[derive(Serialize, Deserialize)]
 pub struct ResponseErrorMessage<T: Display> {
     code: T,

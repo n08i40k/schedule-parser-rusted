@@ -1,6 +1,6 @@
 use self::schema::*;
 use crate::app_state::AppState;
-use crate::routes::schedule::schema::{Error, ScheduleView};
+use crate::routes::schedule::schema::{ErrorCode, ScheduleView};
 use crate::routes::schema::{IntoResponseAsError, ResponseError};
 use actix_web::{get, web};
 
@@ -9,30 +9,17 @@ use actix_web::{get, web};
     (status = SERVICE_UNAVAILABLE, body = ResponseError<ErrorCode>)
 ))]
 #[get("/")]
-pub async fn get_schedule(app_state: web::Data<AppState>) -> Response {
-    match ScheduleView::try_from(app_state.get_ref()) {
+pub async fn get_schedule(app_state: web::Data<AppState>) -> ServiceResponse {
+    match ScheduleView::try_from(&app_state) {
         Ok(res) => Ok(res).into(),
         Err(e) => match e {
-            Error::NoSchedule => ErrorCode::NoSchedule.into_response(),
+            ErrorCode::NoSchedule => ErrorCode::NoSchedule.into_response(),
         },
     }
 }
 
 mod schema {
-    use crate::routes::schedule::schema::ScheduleView;
-    use actix_macros::{IntoResponseErrorNamed, StatusCode};
-    use derive_more::Display;
-    use serde::Serialize;
-    use utoipa::ToSchema;
+    use crate::routes::schedule::schema::{ErrorCode, ScheduleView};
 
-    pub type Response = crate::routes::schema::Response<ScheduleView, ErrorCode>;
-
-    #[derive(Clone, Serialize, ToSchema, StatusCode, Display, IntoResponseErrorNamed)]
-    #[status_code = "actix_web::http::StatusCode::SERVICE_UNAVAILABLE"]
-    #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-    #[schema(as = ScheduleView::ErrorCode)]
-    pub enum ErrorCode {
-        #[display("Schedule not parsed yet")]
-        NoSchedule,
-    }
+    pub type ServiceResponse = crate::routes::schema::Response<ScheduleView, ErrorCode>;
 }

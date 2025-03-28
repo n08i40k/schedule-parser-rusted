@@ -30,7 +30,7 @@ pub mod users {
             .select(User::as_select())
             .first(con)
     }
-    
+
     pub fn get_by_vk_id(
         connection: &Mutex<PgConnection>,
         _vk_id: i32,
@@ -72,6 +72,14 @@ pub mod users {
         }
     }
 
+    pub fn insert(connection: &Mutex<PgConnection>, user: &User) -> QueryResult<usize> {
+        let mut lock = connection.lock().unwrap();
+        let con = lock.deref_mut();
+
+        insert_into(users).values(user).execute(con)
+    }
+
+    #[cfg(test)]
     pub fn delete_by_username(connection: &Mutex<PgConnection>, _username: &String) -> bool {
         let mut lock = connection.lock().unwrap();
         let con = lock.deref_mut();
@@ -81,14 +89,8 @@ pub mod users {
             Err(_) => false,
         }
     }
-
-    pub fn insert(connection: &Mutex<PgConnection>, user: &User) -> QueryResult<usize> {
-        let mut lock = connection.lock().unwrap();
-        let con = lock.deref_mut();
-
-        insert_into(users).values(user).execute(con)
-    }
-
+    
+    #[cfg(test)]
     pub fn insert_or_ignore(connection: &Mutex<PgConnection>, user: &User) -> QueryResult<usize> {
         let mut lock = connection.lock().unwrap();
         let con = lock.deref_mut();

@@ -121,16 +121,9 @@ mod responder_json {
                 type Body = ::actix_web::body::EitherBody<::actix_web::body::BoxBody>;
 
                 fn respond_to(self, _: &::actix_web::HttpRequest) -> ::actix_web::HttpResponse<Self::Body> {
-                    match ::serde_json::to_string(&self) {
-                        Ok(body) => ::actix_web::HttpResponse::Ok()
-                            .json(body)
-                            .map_into_left_body(),
-
-                        Err(err) => ::actix_web::HttpResponse::from_error(
-                            ::actix_web::error::JsonPayloadError::Serialize(err),
-                        )
-                        .map_into_right_body(),
-                    }
+                    ::actix_web::HttpResponse::Ok()
+                            .json(self)
+                            .map_into_left_body()
                 }
             }
         })

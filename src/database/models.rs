@@ -35,12 +35,27 @@ pub enum UserRole {
 #[diesel(table_name = crate::database::schema::users)]
 #[diesel(treat_none_as_null = true)]
 pub struct User {
+    /// UUID аккаунта
     pub id: String,
+
+    /// Имя пользователя
     pub username: String,
+
+    /// BCrypt хеш пароля
     pub password: String,
+
+    /// Идентификатор привязанного аккаунта VK
     pub vk_id: Option<i32>,
+
+    /// JWT токен доступа
     pub access_token: String,
+
+    /// Группа
     pub group: String,
+
+    /// Роль
     pub role: UserRole,
+
+    /// Версия установленного приложения Polytechnic+
     pub version: String,
 }

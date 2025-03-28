@@ -1,7 +1,7 @@
 use crate::parser::LessonParseResult::{Lessons, Street};
 use crate::parser::schema::LessonType::Break;
 use crate::parser::schema::{
-    Day, Lesson, LessonSubGroup, LessonTime, LessonType, ParseResult, ScheduleEntry,
+    Day, Lesson, LessonSubGroup, LessonTime, LessonType, ParseError, ParseResult, ScheduleEntry,
 };
 use calamine::{Reader, Xls, open_workbook_from_rs};
 use chrono::{Duration, NaiveDateTime};
@@ -14,15 +14,12 @@ use std::sync::LazyLock;
 
 pub mod schema;
 
+/// Данные ячейке хранящей строку
 struct InternalId {
-    /**
-     * Индекс строки
-     */
+    /// Индекс строки
     row: u32,
 
-    /**
-     * Индекс столбца
-     */
+    /// Индекс столбца
     column: u32,
 
     /**
@@ -31,30 +28,25 @@ struct InternalId {
     name: String,
 }
 
+/// Данные о времени проведения пар из второй колонки расписания
 struct InternalTime {
-    /**
-     * Временной отрезок проведения пары
-     */
+    /// Временной отрезок проведения пары
     time_range: LessonTime,
 
-    /**
-     * Тип пары
-     */
+    /// Тип пары
     lesson_type: LessonType,
 
-    /**
-     * Индекс пары
-     */
+    /// Индекс пары
     default_index: Option<u32>,
 
-    /**
-     * Рамка ячейки
-     */
+    /// Рамка ячейки
     xls_range: ((u32, u32), (u32, u32)),
 }
 
+/// Сокращение типа рабочего листа
 type WorkSheet = calamine::Range<calamine::Data>;
 
+/// Получение строки из требуемой ячейки
 fn get_string_from_cell(worksheet: &WorkSheet, row: u32, col: u32) -> Option<String> {
     let cell_data = if let Some(data) = worksheet.get((row as usize, col as usize)) {
         data.to_string()
@@ -82,6 +74,7 @@ fn get_string_from_cell(worksheet: &WorkSheet, row: u32, col: u32) -> Option<Str
     }
 }
 
+/// Получение границ ячейки по её верхней левой координате
 fn get_merge_from_start(worksheet: &WorkSheet, row: u32, column: u32) -> ((u32, u32), (u32, u32)) {
     let worksheet_end = worksheet.end().unwrap();
 
@@ -116,7 +109,8 @@ fn get_merge_from_start(worksheet: &WorkSheet, row: u32, column: u32) -> ((u32, 
     ((row, column), (row_end, column_end))
 }
 
-fn parse_skeleton(worksheet: &WorkSheet) -> (Vec<InternalId>, Vec<InternalId>) {
+/// Получение "скелета" расписания из рабочего листа
+fn parse_skeleton(worksheet: &WorkSheet) -> Result<(Vec<InternalId>, Vec<InternalId>), ParseError> {
     let range = &worksheet;
 
     let mut is_parsed = false;
@@ -124,8 +118,8 @@ fn parse_skeleton(worksheet: &WorkSheet) -> (Vec<InternalId>, Vec<InternalId>) {
     let mut groups: Vec<InternalId> = Vec::new();
     let mut days: Vec<InternalId> = Vec::new();
 
-    let start = range.start().expect("Could not find start");
-    let end = range.end().expect("Could not find end");
+    let start = range.start().ok_or(ParseError::UnknownWorkSheetRange)?;
+    let end = range.end().ok_or(ParseError::UnknownWorkSheetRange)?;
 
     let mut row = start.0;
     while row < end.0 {
@@ -170,15 +164,22 @@ fn parse_skeleton(worksheet: &WorkSheet) -> (Vec<InternalId>, Vec<InternalId>) {
         }
     }
 
-    (days, groups)
+    Ok((days, groups))
 }
 
+/// Результат получения пары из ячейки
 enum LessonParseResult {
+    /// Список пар длинной от одного до двух
+    ///
+    /// Количество пар будет равно одному, если пара первая за день, иначе будет возвращен список из шаблона перемены и самой пары
     Lessons(Vec<Lesson>),
+    
+    /// Улица на которой находится корпус политехникума
     Street(String),
 }
 
 trait StringInnerSlice {
+    /// Получения отрезка строки из строки по начальному и конечному индексу
     fn inner_slice(&self, from: usize, to: usize) -> Self;
 }
 
@@ -191,6 +192,7 @@ impl StringInnerSlice for String {
     }
 }
 
+/// Получение нестандартного типа пары по названию
 fn guess_lesson_type(name: &String) -> Option<(String, LessonType)> {
     let map: HashMap<String, LessonType> = HashMap::from([
         ("(консультация)".to_string(), LessonType::Consultation),
@@ -232,19 +234,20 @@ fn guess_lesson_type(name: &String) -> Option<(String, LessonType)> {
     }
 }
 
+/// Получение пары или улицы из ячейки
 fn parse_lesson(
     worksheet: &WorkSheet,
     day: &mut Day,
     day_times: &Vec<InternalTime>,
     time: &InternalTime,
     column: u32,
-) -> LessonParseResult {
+) -> Result<LessonParseResult, ParseError> {
     let row = time.xls_range.0.0;
 
     let (name, lesson_type) = {
         let raw_name_opt = get_string_from_cell(&worksheet, row, column);
         if raw_name_opt.is_none() {
-            return Lessons(Vec::new());
+            return Ok(Lessons(Vec::new()));
         }
 
         let raw_name = raw_name_opt.unwrap();
@@ -253,7 +256,7 @@ fn parse_lesson(
             LazyLock::new(|| Regex::new(r"^[А-Я][а-я]+,?\s?[0-9]+$").unwrap());
 
         if OTHER_STREET_RE.is_match(&raw_name) {
-            return Street(raw_name);
+            return Ok(Street(raw_name));
         }
 
         if let Some(guess) = guess_lesson_type(&raw_name) {
@@ -263,7 +266,7 @@ fn parse_lesson(
         }
     };
 
-    let (default_range, lesson_time): (Option<[u8; 2]>, LessonTime) = {
+    let (default_range, lesson_time) = || -> Result<(Option<[u8; 2]>, LessonTime), ParseError> {
         // check if multi-lesson
         let cell_range = get_merge_from_start(worksheet, row, column);
 
@@ -272,7 +275,7 @@ fn parse_lesson(
             .filter(|time| time.xls_range.1.0 == cell_range.1.0)
             .collect::<Vec<&InternalTime>>();
 
-        let end_time = end_time_arr.first().expect("Unable to find lesson time!");
+        let end_time = end_time_arr.first().ok_or(ParseError::LessonTimeNotFound)?;
 
         let range: Option<[u8; 2]> = if time.default_index != None {
             let default = time.default_index.unwrap() as u8;
@@ -286,10 +289,10 @@ fn parse_lesson(
             end: end_time.time_range.end,
         };
 
-        (range, time)
-    };
+        Ok((range, time))
+    }()?;
 
-    let (name, mut subgroups) = parse_name_and_subgroups(&name);
+    let (name, mut subgroups) = parse_name_and_subgroups(&name)?;
 
     {
         let cabinets: Vec<String> = parse_cabinets(worksheet, row, column + 1);
@@ -345,12 +348,12 @@ fn parse_lesson(
     };
 
     let prev_lesson = if day.lessons.len() == 0 {
-        return Lessons(Vec::from([lesson]));
+        return Ok(Lessons(Vec::from([lesson])));
     } else {
         &day.lessons[day.lessons.len() - 1]
     };
 
-    Lessons(Vec::from([
+    Ok(Lessons(Vec::from([
         Lesson {
             lesson_type: Break,
             default_range: None,
@@ -363,9 +366,10 @@ fn parse_lesson(
             group: None,
         },
         lesson,
-    ]))
+    ])))
 }
 
+/// Получение списка кабинетов справа от ячейки пары
 fn parse_cabinets(worksheet: &WorkSheet, row: u32, column: u32) -> Vec<String> {
     let mut cabinets: Vec<String> = Vec::new();
 
@@ -383,15 +387,16 @@ fn parse_cabinets(worksheet: &WorkSheet, row: u32, column: u32) -> Vec<String> {
     cabinets
 }
 
-fn parse_name_and_subgroups(name: &String) -> (String, Vec<LessonSubGroup>) {
+/// Получение "чистого" названия пары и списка преподавателей из текста ячейки пары
+fn parse_name_and_subgroups(name: &String) -> Result<(String, Vec<LessonSubGroup>), ParseError> {
     static LESSON_RE: LazyLock<Regex, fn() -> Regex> =
         LazyLock::new(|| Regex::new(r"(?:[А-Я][а-я]+[А-Я]{2}(?:\([0-9][а-я]+\))?)+$").unwrap());
     static TEACHER_RE: LazyLock<Regex, fn() -> Regex> =
         LazyLock::new(|| Regex::new(r"([А-Я][а-я]+)([А-Я])([А-Я])(?:\(([0-9])[а-я]+\))?").unwrap());
     static CLEAN_RE: LazyLock<Regex, fn() -> Regex> =
         LazyLock::new(|| Regex::new(r"[\s.,]+").unwrap());
-    static NAME_CLEAN_RE: LazyLock<Regex, fn() -> Regex> =
-        LazyLock::new(|| Regex::new(r"\.\s+$").unwrap());
+    static END_CLEAN_RE: LazyLock<Regex, fn() -> Regex> =
+        LazyLock::new(|| Regex::new(r"[.\s]+$").unwrap());
 
     let (teachers, lesson_name) = {
         let clean_name = CLEAN_RE.replace_all(&name, "").to_string();
@@ -402,11 +407,13 @@ fn parse_name_and_subgroups(name: &String) -> (String, Vec<LessonSubGroup>) {
             let capture_name: String = capture_str.chars().take(5).collect();
 
             (
-                NAME_CLEAN_RE.replace(&capture_str, "").to_string(),
-                name[0..name.find(&*capture_name).unwrap()].to_string(),
+                END_CLEAN_RE.replace(&capture_str, "").to_string(),
+                END_CLEAN_RE
+                    .replace(&name[0..name.find(&*capture_name).unwrap()], "")
+                    .to_string(),
             )
         } else {
-            return (NAME_CLEAN_RE.replace(&name, "").to_string(), Vec::new());
+            return Ok((END_CLEAN_RE.replace(&name, "").to_string(), Vec::new()));
         }
     };
 
@@ -421,7 +428,7 @@ fn parse_name_and_subgroups(name: &String) -> (String, Vec<LessonSubGroup>) {
                     .as_str()
                     .to_string()
                     .parse::<u8>()
-                    .expect("Unable to read subgroup index!")
+                    .map_err(|_| ParseError::SubgroupIndexParsingFailed)?
             } else {
                 0
             },
@@ -432,7 +439,7 @@ fn parse_name_and_subgroups(name: &String) -> (String, Vec<LessonSubGroup>) {
                 captures.get(2).unwrap().as_str().to_string(),
                 captures.get(3).unwrap().as_str().to_string()
             ),
-        })
+        });
     }
 
     // фикс, если у кого-то отсутствует индекс подгруппы
@@ -469,9 +476,10 @@ fn parse_name_and_subgroups(name: &String) -> (String, Vec<LessonSubGroup>) {
         subgroups.reverse()
     }
 
-    (lesson_name, subgroups)
+    Ok((lesson_name, subgroups))
 }
 
+/// Конвертация списка пар групп в список пар преподавателей
 fn convert_groups_to_teachers(
     groups: &HashMap<String, ScheduleEntry>,
 ) -> HashMap<String, ScheduleEntry> {
@@ -537,21 +545,31 @@ fn convert_groups_to_teachers(
         }
     }
 
+    teachers.iter_mut().for_each(|(_, teacher)| {
+        teacher.days.iter_mut().for_each(|day| {
+            day.lessons.sort_by(|a, b| {
+                a.default_range.as_ref().unwrap()[1].cmp(&b.default_range.as_ref().unwrap()[1])
+            })
+        })
+    });
+
     teachers
 }
 
-pub fn parse_xls(buffer: &Vec<u8>) -> ParseResult {
+/// Чтение XLS документа из буфера и преобразование его в готовые к использованию расписания
+pub fn parse_xls(buffer: &Vec<u8>) -> Result<ParseResult, ParseError> {
     let cursor = Cursor::new(&buffer);
-    let mut workbook: Xls<_> = open_workbook_from_rs(cursor).expect("Can't open workbook");
+    let mut workbook: Xls<_> =
+        open_workbook_from_rs(cursor).map_err(|e| ParseError::BadXLS(std::sync::Arc::new(e)))?;
 
     let worksheet: WorkSheet = workbook
         .worksheets()
         .first()
-        .expect("No worksheet found")
+        .ok_or(ParseError::NoWorkSheets)?
         .1
         .to_owned();
 
-    let (days_markup, groups_markup) = parse_skeleton(&worksheet);
+    let (days_markup, groups_markup) = parse_skeleton(&worksheet)?;
 
     let mut groups: HashMap<String, ScheduleEntry> = HashMap::new();
     let mut days_times: Vec<Vec<InternalTime>> = Vec::new();
@@ -631,9 +649,7 @@ pub fn parse_xls(buffer: &Vec<u8>) -> ParseResult {
                         static TIME_RE: LazyLock<Regex, fn() -> Regex> =
                             LazyLock::new(|| Regex::new(r"(\d+\.\d+)-(\d+\.\d+)").unwrap());
 
-                        let parse_res = TIME_RE
-                            .captures(&time)
-                            .expect("Unable to obtain lesson start and end!");
+                        let parse_res = TIME_RE.captures(&time).ok_or(ParseError::GlobalTime)?;
 
                         let start_match = parse_res.get(1).unwrap().as_str();
                         let start_parts: Vec<&str> = start_match.split(".").collect();
@@ -671,7 +687,7 @@ pub fn parse_xls(buffer: &Vec<u8>) -> ParseResult {
                     &day_times,
                     &time,
                     group_markup.column,
-                ) {
+                )? {
                     Lessons(l) => day.lessons.append(l),
                     Street(s) => day.street = Some(s.to_owned()),
                 }
@@ -683,27 +699,27 @@ pub fn parse_xls(buffer: &Vec<u8>) -> ParseResult {
         groups.insert(group.name.clone(), group);
     }
 
-    ParseResult {
+    Ok(ParseResult {
         teachers: convert_groups_to_teachers(&groups),
         groups,
-    }
+    })
 }
 
 #[cfg(test)]
 pub mod tests {
     use super::*;
 
-    pub fn test_result() -> ParseResult {
-        let buffer: Vec<u8> = include_bytes!("../../schedule.xls").to_vec();
-
-        parse_xls(&buffer)
+    pub fn test_result() -> Result<ParseResult, ParseError> {
+        parse_xls(&include_bytes!("../../schedule.xls").to_vec())
     }
 
     #[test]
     fn read() {
         let result = test_result();
 
-        assert_ne!(result.groups.len(), 0);
-        assert_ne!(result.teachers.len(), 0);
+        assert!(result.is_ok());
+
+        assert_ne!(result.as_ref().unwrap().groups.len(), 0);
+        assert_ne!(result.as_ref().unwrap().teachers.len(), 0);
     }
 }

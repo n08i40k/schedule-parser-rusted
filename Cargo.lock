@@ -50,7 +50,7 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "rand 0.9.0",
- "sha1",
+ "sha1 0.10.6",
  "smallvec",
  "tokio",
  "tokio-util",
@@ -2351,7 +2351,7 @@ dependencies = [
 
 [[package]]
 name = "schedule-parser-rusted"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "actix-macros 0.1.0",
  "actix-test",
@@ -2367,6 +2367,7 @@ dependencies = [
  "env_logger",
  "futures-util",
  "fuzzy-matcher",
+ "hex",
  "jsonwebtoken",
  "mime",
  "objectid",
@@ -2377,7 +2378,7 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "serde_with",
- "sha2",
+ "sha1 0.11.0-pre.5",
  "tokio",
  "utoipa",
  "utoipa-actix-web",
@@ -2510,10 +2511,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "sha2"
+name = "sha1"
 version = "0.11.0-pre.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19b4241d1a56954dce82cecda5c8e9c794eef6f53abe5e5216bac0a0ea71ffa7"
+checksum = "55f44e40722caefdd99383c25d3ae52a1094a1951215ae76f68837ece4e7f566"
 dependencies = [
  "cfg-if",
  "cpufeatures",

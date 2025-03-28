@@ -3,20 +3,25 @@ use actix_web::{FromRequest, HttpRequest};
 use futures_util::future::LocalBoxFuture;
 use std::future::{Ready, ready};
 
-pub trait FromRequestAsync: Sized {
-    type Error: Into<actix_web::Error>;
-
-    async fn from_request_async(req: HttpRequest, payload: Payload) -> Result<Self, Self::Error>;
-}
-
+/// Асинхронный экстрактор объектов из запроса
 pub struct AsyncExtractor<T>(T);
 
 impl<T> AsyncExtractor<T> {
+    #[allow(dead_code)]
+    /// Получение объекта, извлечённого с помощью экстрактора
     pub fn into_inner(self) -> T {
         self.0
     }
 }
 
+pub trait FromRequestAsync: Sized {
+    type Error: Into<actix_web::Error>;
+
+    /// Асинхронная функция для извлечения данных из запроса
+    async fn from_request_async(req: HttpRequest, payload: Payload) -> Result<Self, Self::Error>;
+}
+
+/// Реализация треита FromRequest для всех асинхронных экстракторов
 impl<T: FromRequestAsync> FromRequest for AsyncExtractor<T> {
     type Error = T::Error;
     type Future = LocalBoxFuture<'static, Result<Self, Self::Error>>;
@@ -32,20 +37,24 @@ impl<T: FromRequestAsync> FromRequest for AsyncExtractor<T> {
     }
 }
 
-pub trait FromRequestSync: Sized {
-    type Error: Into<actix_web::Error>;
-
-    fn from_request_sync(req: &HttpRequest, payload: &mut Payload) -> Result<Self, Self::Error>;
-}
-
+/// Синхронный экстрактор объектов из запроса
 pub struct SyncExtractor<T>(T);
 
 impl<T> SyncExtractor<T> {
+    /// Получение объекта, извлечённого с помощью экстрактора
     pub fn into_inner(self) -> T {
         self.0
     }
 }
 
+pub trait FromRequestSync: Sized {
+    type Error: Into<actix_web::Error>;
+
+    /// Синхронная функция для извлечения данных из запроса
+    fn from_request_sync(req: &HttpRequest, payload: &mut Payload) -> Result<Self, Self::Error>;
+}
+
+/// Реализация треита FromRequest для всех синхронных экстракторов
 impl<T: FromRequestSync> FromRequest for SyncExtractor<T> {
     type Error = T::Error;
     type Future = Ready<Result<Self, Self::Error>>;

@@ -7,9 +7,10 @@ use actix_web::{Error, HttpRequest, ResponseError};
 use futures_util::future::LocalBoxFuture;
 use std::future::{Ready, ready};
 
-pub struct Authorization;
+/// Middleware guard работающий с токенами JWT
+pub struct JWTAuthorization;
 
-impl<S, B> Transform<S, ServiceRequest> for Authorization
+impl<S, B> Transform<S, ServiceRequest> for JWTAuthorization
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
     S::Future: 'static,
@@ -17,20 +18,21 @@ where
 {
     type Response = ServiceResponse<EitherBody<B, BoxBody>>;
     type Error = Error;
-    type Transform = AuthorizationMiddleware<S>;
+    type Transform = JWTAuthorizationMiddleware<S>;
     type InitError = ();
     type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
     fn new_transform(&self, service: S) -> Self::Future {
-        ready(Ok(AuthorizationMiddleware { service }))
+        ready(Ok(JWTAuthorizationMiddleware { service }))
     }
 }
 
-pub struct AuthorizationMiddleware<S> {
+pub struct JWTAuthorizationMiddleware<S> {
     service: S,
 }
 
-impl<S, B> AuthorizationMiddleware<S>
+/// Функция для проверки наличия и действительности токена в запросе, а так же существования пользователя к которому он привязан
+impl<S, B> JWTAuthorizationMiddleware<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
     S::Future: 'static,
@@ -47,7 +49,7 @@ where
     }
 }
 
-impl<S, B> Service<ServiceRequest> for AuthorizationMiddleware<S>
+impl<S, B> Service<ServiceRequest> for JWTAuthorizationMiddleware<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
     S::Future: 'static,

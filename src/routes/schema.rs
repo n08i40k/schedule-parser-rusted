@@ -112,27 +112,31 @@ pub mod user {
     use crate::database::models::{User, UserRole};
     use actix_macros::ResponderJson;
     use serde::Serialize;
-
-    /// UserResponse
-    ///
-    /// Uses for stripping sensitive fields (password, fcm, etc.) from response.
+    
+    /// Используется для скрытия чувствительных полей, таких как хеш пароля или FCM
     #[derive(Serialize, utoipa::ToSchema, ResponderJson)]
     #[serde(rename_all = "camelCase")]
     pub struct UserResponse {
+        /// UUID
         #[schema(examples("67dcc9a9507b0000772744a2"))]
         id: String,
 
+        /// Имя пользователя
         #[schema(examples("n08i40k"))]
         username: String,
 
+        /// Группа
         #[schema(examples("ИС-214/23"))]
         group: String,
 
+        /// Роль
         role: UserRole,
 
+        /// Идентификатор прявязанного аккаунта VK
         #[schema(examples(498094647, json!(null)))]
         vk_id: Option<i32>,
 
+        /// JWT токен доступа
         #[schema(examples(
             "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6IjY3ZGNjOWE5NTA3YjAwMDA3NzI3NDRhMiIsImlhdCI6IjE3NDMxMDgwOTkiLCJleHAiOiIxODY5MjUyMDk5In0.rMgXRb3JbT9AvLK4eiY9HMB5LxgUudkpQyoWKOypZFY"
         ))]

@@ -6,25 +6,29 @@ use crate::utility::jwt;
 use actix_macros::ResponseErrorMessage;
 use actix_web::body::BoxBody;
 use actix_web::dev::Payload;
+use actix_web::http::header;
 use actix_web::{HttpRequest, web};
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-use actix_web::http::header;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Display, ResponseErrorMessage)]
 #[status_code = "actix_web::http::StatusCode::UNAUTHORIZED"]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Error {
+    /// В запросе отсутствует заголовок Authorization
     #[display("No Authorization header found")]
     NoHeader,
 
+    /// Неизвестный тип авторизации, отличающийся от Bearer
     #[display("Bearer token is required")]
     UnknownAuthorizationType,
 
+    /// Токен не действителен
     #[display("Invalid or expired access token")]
     InvalidAccessToken,
 
+    /// Пользователь привязанный к токену не найден в базе данных
     #[display("No user associated with access token")]
     NoUser,
 }
@@ -35,6 +39,7 @@ impl Error {
     }
 }
 
+/// Экстрактор пользователя из запроса с токеном
 impl FromRequestSync for User {
     type Error = actix_web::Error;
 
