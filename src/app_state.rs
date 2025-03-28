@@ -1,11 +1,12 @@
+use crate::parser::schema::ParseResult;
 use crate::xls_downloader::basic_impl::BasicXlsDownloader;
 use actix_web::web;
 use chrono::{DateTime, Utc};
 use diesel::{Connection, PgConnection};
 use std::env;
 use std::sync::{Mutex, MutexGuard};
-use crate::parser::schema::ParseResult;
 
+#[derive(Clone)]
 pub struct Schedule {
     pub etag: String,
     pub updated_at: DateTime<Utc>,

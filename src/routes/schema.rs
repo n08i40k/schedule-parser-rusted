@@ -3,51 +3,45 @@ use actix_web::error::JsonPayloadError;
 use actix_web::http::StatusCode;
 use actix_web::{HttpRequest, HttpResponse, Responder};
 use serde::{Serialize, Serializer};
+use std::convert::Into;
 use utoipa::PartialSchema;
 
-pub struct IResponse<T, E>(pub Result<T, E>)
+pub struct Response<T, E>(pub Result<T, E>)
 where
     T: Serialize + PartialSchema,
-    E: Serialize + PartialSchema + Clone + HttpStatusCode;
+    E: Serialize + PartialSchema + Clone + PartialStatusCode;
 
-impl<T, E> Into<Result<T, E>> for IResponse<T, E>
+pub trait PartialStatusCode {
+    fn status_code(&self) -> StatusCode;
+}
+
+/// Transform Response<T, E> into Result<T, E>
+impl<T, E> Into<Result<T, E>> for Response<T, E>
 where
     T: Serialize + PartialSchema,
-    E: Serialize + PartialSchema + Clone + HttpStatusCode,
+    E: Serialize + PartialSchema + Clone + PartialStatusCode,
 {
     fn into(self) -> Result<T, E> {
         self.0
     }
 }
 
-impl<T, E> From<E> for IResponse<T, E>
+/// Transform T into Response<T, E>
+impl<T, E> From<Result<T, E>> for Response<T, E>
 where
     T: Serialize + PartialSchema,
-    E: Serialize + PartialSchema + Clone + HttpStatusCode,
+    E: Serialize + PartialSchema + Clone + PartialStatusCode,
 {
-    fn from(value: E) -> Self {
-        IResponse(Err(value))
+    fn from(value: Result<T, E>) -> Self {
+        Response(value)
     }
 }
 
-pub trait HttpStatusCode {
-    fn status_code(&self) -> StatusCode;
-}
-
-impl<T, E> IResponse<T, E>
+/// Serialize Response<T, E>
+impl<T, E> Serialize for Response<T, E>
 where
     T: Serialize + PartialSchema,
-    E: Serialize + PartialSchema + Clone + HttpStatusCode,
-{
-    pub fn new(result: Result<T, E>) -> Self {
-        IResponse(result)
-    }
-}
-
-impl<T, E> Serialize for IResponse<T, E>
-where
-    T: Serialize + PartialSchema,
-    E: Serialize + PartialSchema + Clone + HttpStatusCode,
+    E: Serialize + PartialSchema + Clone + PartialStatusCode + Into<ResponseError<E>>,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -55,15 +49,17 @@ where
     {
         match &self.0 {
             Ok(ok) => serializer.serialize_some::<T>(&ok),
-            Err(err) => serializer.serialize_some::<ResponseError<E>>(&ResponseError::new(err)),
+            Err(err) => serializer
+                .serialize_some::<ResponseError<E>>(&ResponseError::<E>::from(err.clone().into())),
         }
     }
 }
 
-impl<T, E> Responder for IResponse<T, E>
+/// Transform Response<T, E> to HttpResponse<String>
+impl<T, E> Responder for Response<T, E>
 where
     T: Serialize + PartialSchema,
-    E: Serialize + PartialSchema + Clone + HttpStatusCode,
+    E: Serialize + PartialSchema + Clone + PartialStatusCode + Into<ResponseError<E>>,
 {
     type Body = EitherBody<String>;
 
@@ -91,25 +87,36 @@ where
     }
 }
 
+/// ResponseError<T>
+///
+/// Field `message` is optional for backwards compatibility with Android App, that produces error if new fields will be added to JSON response.
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct ResponseError<T: Serialize + PartialSchema> {
-    code: T,
+    pub code: T,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
 
-impl<T: Serialize + PartialSchema + Clone> ResponseError<T> {
-    fn new(status_code: &T) -> Self {
-        ResponseError {
-            code: status_code.clone(),
-        }
+pub trait IntoResponseAsError<T>
+where
+    T: Serialize + PartialSchema,
+    Self: Serialize + PartialSchema + Clone + PartialStatusCode + Into<ResponseError<Self>>,
+{
+    fn into_response(self) -> Response<T, Self> {
+        Response(Err(self))
     }
 }
 
 pub mod user {
     use crate::database::models::{User, UserRole};
-    use actix_macros::{IntoIResponse, ResponderJson};
+    use actix_macros::ResponderJson;
     use serde::Serialize;
 
-    #[derive(Serialize, utoipa::ToSchema, IntoIResponse, ResponderJson)]
+    /// UserResponse
+    ///
+    /// Uses for stripping sensitive fields (password, fcm, etc.) from response.
+    #[derive(Serialize, utoipa::ToSchema, ResponderJson)]
     #[serde(rename_all = "camelCase")]
     pub struct UserResponse {
         #[schema(examples("67dcc9a9507b0000772744a2"))]
@@ -132,6 +139,7 @@ pub mod user {
         access_token: String,
     }
 
+    /// Create UserResponse from User ref.
     impl From<&User> for UserResponse {
         fn from(user: &User) -> Self {
             UserResponse {
@@ -145,6 +153,7 @@ pub mod user {
         }
     }
 
+    /// Transform User to UserResponse.
     impl From<User> for UserResponse {
         fn from(user: User) -> Self {
             UserResponse {

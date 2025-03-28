@@ -3,13 +3,14 @@ use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, utoipa::ToSchema)]
 pub struct LessonTime {
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,
 }
 
-#[derive(Serialize_repr, Deserialize_repr, Debug, PartialEq, Clone)]
+#[derive(Serialize_repr, Deserialize_repr, Debug, PartialEq, Clone, utoipa::ToSchema)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[repr(u8)]
 pub enum LessonType {
     Default = 0,     // Обычная
@@ -22,7 +23,7 @@ pub enum LessonType {
     ExamDefault,     // Экзамен
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive( Serialize, Deserialize, Debug, Clone, utoipa::ToSchema)]
 pub struct LessonSubGroup {
     /**
      * Номер подгруппы.
@@ -40,7 +41,8 @@ pub struct LessonSubGroup {
     pub teacher: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct Lesson {
     /**
      * Тип занятия.
@@ -51,7 +53,6 @@ pub struct Lesson {
     /**
      * Индексы пар, если присутствуют.
      */
-    #[serde(rename = "defaultRange")]
     pub default_range: Option<[u8; 2]>,
 
     /**
@@ -76,7 +77,7 @@ pub struct Lesson {
     pub group: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, utoipa::ToSchema)]
 pub struct Day {
     /**
      * День недели.
@@ -99,7 +100,7 @@ pub struct Day {
     pub lessons: Vec<Lesson>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, utoipa::ToSchema)]
 pub struct ScheduleEntry {
     /**
      * Название группы или ФИО преподавателя.
@@ -112,6 +113,7 @@ pub struct ScheduleEntry {
     pub days: Vec<Day>,
 }
 
+#[derive(Clone)]
 pub struct ParseResult {
     /**
      * Список групп.

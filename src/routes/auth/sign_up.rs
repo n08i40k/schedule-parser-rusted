@@ -3,16 +3,19 @@ use crate::AppState;
 use crate::database::driver;
 use crate::database::models::UserRole;
 use crate::routes::auth::shared::{Error, parse_vk_id};
-use crate::routes::schema::ResponseError;
 use crate::routes::schema::user::UserResponse;
+use crate::routes::schema::{IntoResponseAsError, ResponseError};
 use actix_web::{post, web};
 use rand::{Rng, rng};
 use web::Json;
 
-async fn sign_up(data: SignUpData, app_state: &web::Data<AppState>) -> Response {
+async fn sign_up(
+    data: SignUpData,
+    app_state: &web::Data<AppState>,
+) -> Result<UserResponse, ErrorCode> {
     // If user selected forbidden role.
     if data.role == UserRole::Admin {
-        return ErrorCode::DisallowedRole.into();
+        return Err(ErrorCode::DisallowedRole);
     }
 
     // If specified group doesn't exist in schedule.
@@ -20,26 +23,26 @@ async fn sign_up(data: SignUpData, app_state: &web::Data<AppState>) -> Response 
 
     if let Some(schedule) = &*schedule_opt {
         if !schedule.data.groups.contains_key(&data.group) {
-            return ErrorCode::InvalidGroupName.into();
+            return Err(ErrorCode::InvalidGroupName);
         }
     }
 
     // If user with specified username already exists.
     if driver::users::contains_by_username(&app_state.database, &data.username) {
-        return ErrorCode::UsernameAlreadyExists.into();
+        return Err(ErrorCode::UsernameAlreadyExists);
     }
 
     // If user with specified VKID already exists.
     if let Some(id) = data.vk_id {
         if driver::users::contains_by_vk_id(&app_state.database, id) {
-            return ErrorCode::VkAlreadyExists.into();
+            return Err(ErrorCode::VkAlreadyExists);
         }
     }
 
     let user = data.into();
     driver::users::insert(&app_state.database, &user).unwrap();
 
-    UserResponse::from(&user).into()
+    Ok(UserResponse::from(&user)).into()
 }
 
 #[utoipa::path(responses(
@@ -62,6 +65,7 @@ pub async fn sign_up_default(data_json: Json<Request>, app_state: web::Data<AppS
         &app_state,
     )
     .await
+    .into()
 }
 
 #[utoipa::path(responses(
@@ -69,47 +73,44 @@ pub async fn sign_up_default(data_json: Json<Request>, app_state: web::Data<AppS
     (status = NOT_ACCEPTABLE, body = ResponseError<ErrorCode>)
 ))]
 #[post("/sign-up-vk")]
-pub async fn sign_up_vk(
-    data_json: Json<vk::Request>,
-    app_state: web::Data<AppState>,
-) -> Response {
+pub async fn sign_up_vk(data_json: Json<vk::Request>, app_state: web::Data<AppState>) -> Response {
     let data = data_json.into_inner();
 
     match parse_vk_id(&data.access_token) {
-        Ok(id) => {
-            sign_up(
-                SignUpData {
-                    username: data.username,
-                    password: rng()
-                        .sample_iter(&rand::distr::Alphanumeric)
-                        .take(16)
-                        .map(char::from)
-                        .collect(),
-                    vk_id: Some(id),
-                    group: data.group,
-                    role: data.role,
-                    version: data.version,
-                },
-                &app_state,
-            )
-            .await
-        }
+        Ok(id) => sign_up(
+            SignUpData {
+                username: data.username,
+                password: rng()
+                    .sample_iter(&rand::distr::Alphanumeric)
+                    .take(16)
+                    .map(char::from)
+                    .collect(),
+                vk_id: Some(id),
+                group: data.group,
+                role: data.role,
+                version: data.version,
+            },
+            &app_state,
+        )
+        .await
+        .into(),
         Err(err) => {
             if err != Error::Expired {
                 eprintln!("Failed to parse vk id token!");
                 eprintln!("{:?}", err);
             }
 
-            ErrorCode::InvalidVkAccessToken.into()
+            ErrorCode::InvalidVkAccessToken.into_response()
         }
     }
 }
 
 mod schema {
     use crate::database::models::{User, UserRole};
+    use crate::routes::schema::PartialStatusCode;
     use crate::routes::schema::user::UserResponse;
-    use crate::routes::schema::{HttpStatusCode, IResponse};
     use crate::utility;
+    use actix_macros::{IntoResponseError, StatusCode};
     use actix_web::http::StatusCode;
     use objectid::ObjectId;
     use serde::{Deserialize, Serialize};
@@ -156,9 +157,10 @@ mod schema {
         }
     }
 
-    pub type Response = IResponse<UserResponse, ErrorCode>;
+    pub type Response = crate::routes::schema::Response<UserResponse, ErrorCode>;
 
-    #[derive(Clone, Serialize, utoipa::ToSchema)]
+    #[derive(Clone, Serialize, utoipa::ToSchema, IntoResponseError, StatusCode)]
+    #[status_code = "StatusCode::NOT_ACCEPTABLE"]
     #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
     #[schema(as = SignUp::ErrorCode)]
     pub enum ErrorCode {
@@ -167,12 +169,6 @@ mod schema {
         UsernameAlreadyExists,
         InvalidVkAccessToken,
         VkAlreadyExists,
-    }
-
-    impl HttpStatusCode for ErrorCode {
-        fn status_code(&self) -> StatusCode {
-            StatusCode::NOT_ACCEPTABLE
-        }
     }
 
     /// Internal

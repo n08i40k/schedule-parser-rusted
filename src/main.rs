@@ -7,6 +7,7 @@ use actix_web::{App, HttpServer};
 use dotenvy::dotenv;
 use utoipa_actix_web::AppExt;
 use utoipa_rapidoc::RapiDoc;
+use crate::routes::schedule::get_schedule::get_schedule;
 
 mod app_state;
 
@@ -40,10 +41,15 @@ async fn main() {
         let users_scope = utoipa_actix_web::scope("/users")
             .wrap(Authorization)
             .service(me);
+        
+        let schedule_scope = utoipa_actix_web::scope("/schedule")
+            .wrap(Authorization)
+            .service(get_schedule);
 
         let api_scope = utoipa_actix_web::scope("/api/v1")
             .service(auth_scope)
-            .service(users_scope);
+            .service(users_scope)
+            .service(schedule_scope);
 
         let (app, api) = App::new()
             .into_utoipa_app()
