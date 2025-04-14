@@ -8,17 +8,17 @@ use actix_web::{get, web};
     (status = OK, body = Response),
     (status = SERVICE_UNAVAILABLE, body = ResponseError<ErrorCode>),
 ))]
-#[get("/group-names")]
-pub async fn get_group_names(app_state: web::Data<AppState>) -> ServiceResponse {
+#[get("/teacher-names")]
+pub async fn teacher_names(app_state: web::Data<AppState>) -> ServiceResponse {
     // Prevent thread lock
     let schedule_lock = app_state.schedule.lock().unwrap();
 
     match schedule_lock.as_ref() {
         None => ErrorCode::NoSchedule.into_response(),
         Some(schedule) => {
-            let mut names: Vec<String> = schedule.data.groups.keys().cloned().collect();
+            let mut names: Vec<String> = schedule.data.teachers.keys().cloned().collect();
             names.sort();
-            
+
             Ok(names.into()).into()
         }
     }
@@ -33,10 +33,10 @@ mod schema {
     pub type ServiceResponse = crate::routes::schema::Response<Response, ErrorCode>;
 
     #[derive(Serialize, ToSchema)]
-    #[schema(as = GetGroupNames::Response)]
+    #[schema(as = GetTeacherNames::Response)]
     pub struct Response {
-        /// Список названий групп отсортированный в алфавитном порядке
-        #[schema(examples(json!(["ИС-214/23"])))]
+        /// Список имён преподавателей отсортированный в алфавитном порядке
+        #[schema(examples(json!(["Хомченко Н.Е."])))]
         pub names: Vec<String>,
     }
 

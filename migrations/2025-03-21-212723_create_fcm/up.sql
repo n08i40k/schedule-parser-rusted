@@ -1,11 +1,6 @@
 CREATE TABLE fcm
 (
-    user_id text PRIMARY KEY NOT NULL,
+    user_id text PRIMARY KEY NOT NULL REFERENCES users (id),
     token   text             NOT NULL,
-    topics  text[]           NULL
+    topics  text[]           NOT NULL
 );
-
-CREATE UNIQUE INDEX fcm_user_id_key ON fcm USING btree (user_id);
-
-ALTER TABLE fcm
-    ADD CONSTRAINT fcm_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE RESTRICT ON UPDATE CASCADE;

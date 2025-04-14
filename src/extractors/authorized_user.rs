@@ -1,13 +1,13 @@
 use crate::app_state::AppState;
 use crate::database::driver;
-use crate::database::models::User;
-use crate::extractors::base::FromRequestSync;
+use crate::database::models::{FCM, User};
+use crate::extractors::base::{FromRequestSync, SyncExtractor};
 use crate::utility::jwt;
 use actix_macros::ResponseErrorMessage;
 use actix_web::body::BoxBody;
 use actix_web::dev::Payload;
 use actix_web::http::header;
-use actix_web::{HttpRequest, web};
+use actix_web::{FromRequest, HttpRequest, web};
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -64,5 +64,47 @@ impl FromRequestSync for User {
         let app_state = req.app_data::<web::Data<AppState>>().unwrap();
 
         driver::users::get(&app_state.database, &user_id).map_err(|_| Error::NoUser.into())
+    }
+}
+
+pub struct UserExtractor<const FCM: bool> {
+    user: User,
+
+    fcm: Option<FCM>,
+}
+
+impl<const FCM: bool> UserExtractor<{ FCM }> {
+    pub fn user(&self) -> &User {
+        &self.user
+    }
+
+    pub fn fcm(&self) -> &Option<FCM> {
+        if !FCM {
+            panic!("FCM marked as not required, but it has been requested")
+        }
+
+        &self.fcm
+    }
+}
+
+/// Экстрактор пользователя и дополнительных параметров из запроса с токеном
+impl<const FCM: bool> FromRequestSync for UserExtractor<{ FCM }> {
+    type Error = actix_web::Error;
+
+    fn from_request_sync(req: &HttpRequest, payload: &mut Payload) -> Result<Self, Self::Error> {
+        let user = SyncExtractor::<User>::from_request(req, payload)
+            .into_inner()?
+            .into_inner();
+
+        let app_state = req.app_data::<web::Data<AppState>>().unwrap();
+
+        Ok(Self {
+            fcm: if FCM {
+                driver::fcm::from_user(&app_state.database, &user).ok()
+            } else {
+                None
+            },
+            user,
+        })
     }
 }

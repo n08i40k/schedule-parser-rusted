@@ -7,6 +7,7 @@ use diesel::{Connection, PgConnection};
 use sha1::{Digest, Sha1};
 use std::env;
 use std::hash::Hash;
+use std::ops::DerefMut;
 use std::sync::{Mutex, MutexGuard};
 
 #[derive(Clone)]
@@ -16,6 +17,24 @@ pub struct Schedule {
     pub updated_at: DateTime<Utc>,
     pub parsed_at: DateTime<Utc>,
     pub data: ParseResult,
+}
+
+#[derive(Clone)]
+pub struct VkId {
+    pub client_id: i32,
+    pub redirect_url: String,
+}
+
+impl VkId {
+    pub fn new() -> Self {
+        Self {
+            client_id: env::var("VKID_CLIENT_ID")
+                .expect("VKID_CLIENT_ID must be set")
+                .parse()
+                .expect("VKID_CLIENT_ID must be integer"),
+            redirect_url: env::var("VKID_REDIRECT_URI").expect("VKID_REDIRECT_URI must be set"),
+        }
+    }
 }
 
 impl Schedule {
@@ -36,6 +55,23 @@ pub struct AppState {
     pub downloader: Mutex<BasicXlsDownloader>,
     pub schedule: Mutex<Option<Schedule>>,
     pub database: Mutex<PgConnection>,
+    pub vk_id: VkId,
+}
+
+impl AppState {
+    pub fn new() -> Self {
+        let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+
+        Self {
+            downloader: Mutex::new(BasicXlsDownloader::new()),
+            schedule: Mutex::new(None),
+            database: Mutex::new(
+                PgConnection::establish(&database_url)
+                    .unwrap_or_else(|_| panic!("Error connecting to {}", database_url)),
+            ),
+            vk_id: VkId::new(),
+        }
+    }
 }
 
 impl AppState {
@@ -43,18 +79,19 @@ impl AppState {
     pub fn connection(&self) -> MutexGuard<PgConnection> {
         self.database.lock().unwrap()
     }
+
+    pub fn lock_connection<T, F>(&self, f: F) -> T
+    where
+        F: FnOnce(&mut PgConnection) -> T,
+    {
+        let mut lock = self.connection();
+        let conn = lock.deref_mut();
+
+        f(conn)
+    }
 }
 
 /// Создание нового объекта web::Data<AppState>
 pub fn app_state() -> web::Data<AppState> {
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-
-    web::Data::new(AppState {
-        downloader: Mutex::new(BasicXlsDownloader::new()),
-        schedule: Mutex::new(None),
-        database: Mutex::new(
-            PgConnection::establish(&database_url)
-                .unwrap_or_else(|_| panic!("Error connecting to {}", database_url)),
-        ),
-    })
+    web::Data::new(AppState::new())
 }

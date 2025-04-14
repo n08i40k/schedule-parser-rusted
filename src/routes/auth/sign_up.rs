@@ -9,7 +9,7 @@ use actix_web::{post, web};
 use rand::{Rng, rng};
 use web::Json;
 
-async fn sign_up(
+async fn sign_up_combined(
     data: SignUpData,
     app_state: &web::Data<AppState>,
 ) -> Result<UserResponse, ErrorCode> {
@@ -50,13 +50,13 @@ async fn sign_up(
     (status = NOT_ACCEPTABLE, body = ResponseError<ErrorCode>)
 ))]
 #[post("/sign-up")]
-pub async fn sign_up_default(
+pub async fn sign_up(
     data_json: Json<Request>,
     app_state: web::Data<AppState>,
 ) -> ServiceResponse {
     let data = data_json.into_inner();
 
-    sign_up(
+    sign_up_combined(
         SignUpData {
             username: data.username,
             password: data.password,
@@ -83,7 +83,7 @@ pub async fn sign_up_vk(
     let data = data_json.into_inner();
 
     match parse_vk_id(&data.access_token) {
-        Ok(id) => sign_up(
+        Ok(id) => sign_up_combined(
             SignUpData {
                 username: data.username,
                 password: rng()
@@ -243,7 +243,7 @@ mod tests {
     use crate::database::driver;
     use crate::database::models::UserRole;
     use crate::routes::auth::sign_up::schema::Request;
-    use crate::routes::auth::sign_up::sign_up_default;
+    use crate::routes::auth::sign_up::sign_up;
     use crate::test_env::tests::{static_app_state, test_app_state, test_env};
     use actix_test::test_app;
     use actix_web::dev::ServiceResponse;
@@ -258,7 +258,7 @@ mod tests {
     }
 
     async fn sign_up_client(data: SignUpPartial) -> ServiceResponse {
-        let app = test_app(test_app_state(), sign_up_default).await;
+        let app = test_app(test_app_state(), sign_up).await;
 
         let req = test::TestRequest::with_uri("/sign-up")
             .method(Method::POST)

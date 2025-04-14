@@ -11,7 +11,7 @@ use diesel::SaveChangesDsl;
 use std::ops::DerefMut;
 use web::Json;
 
-async fn sign_in(
+async fn sign_in_combined(
     data: SignInData,
     app_state: &web::Data<AppState>,
 ) -> Result<UserResponse, ErrorCode> {
@@ -55,8 +55,8 @@ async fn sign_in(
     (status = NOT_ACCEPTABLE, body = ResponseError<ErrorCode>)
 ))]
 #[post("/sign-in")]
-pub async fn sign_in_default(data: Json<Request>, app_state: web::Data<AppState>) -> ServiceResponse {
-    sign_in(Default(data.into_inner()), &app_state).await.into()
+pub async fn sign_in(data: Json<Request>, app_state: web::Data<AppState>) -> ServiceResponse {
+    sign_in_combined(Default(data.into_inner()), &app_state).await.into()
 }
 
 #[utoipa::path(responses(
@@ -68,7 +68,7 @@ pub async fn sign_in_vk(data_json: Json<vk::Request>, app_state: web::Data<AppSt
     let data = data_json.into_inner();
 
     match parse_vk_id(&data.access_token) {
-        Ok(id) => sign_in(Vk(id), &app_state).await.into(),
+        Ok(id) => sign_in_combined(Vk(id), &app_state).await.into(),
         Err(_) => ErrorCode::InvalidVkAccessToken.into_response(),
     }
 }
@@ -134,7 +134,7 @@ mod tests {
     use super::schema::*;
     use crate::database::driver;
     use crate::database::models::{User, UserRole};
-    use crate::routes::auth::sign_in::sign_in_default;
+    use crate::routes::auth::sign_in::sign_in;
     use crate::test_env::tests::{static_app_state, test_app_state, test_env};
     use crate::utility;
     use actix_test::test_app;
@@ -146,7 +146,7 @@ mod tests {
     use std::fmt::Write;
 
     async fn sign_in_client(data: Request) -> ServiceResponse {
-        let app = test_app(test_app_state(), sign_in_default).await;
+        let app = test_app(test_app_state(), sign_in).await;
 
         let req = test::TestRequest::with_uri("/sign-in")
             .method(Method::POST)

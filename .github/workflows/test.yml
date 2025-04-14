@@ -28,3 +28,5 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
           JWT_SECRET: "test-secret-at-least-256-bits-used"
+          VKID_CLIENT_ID: 0
+          VKID_REDIRECT_URI: "vk0://vk.com/blank.html"

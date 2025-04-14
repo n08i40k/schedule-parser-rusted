@@ -10,7 +10,7 @@ diesel::table! {
     fcm (user_id) {
         user_id -> Text,
         token -> Text,
-        topics -> Nullable<Array<Nullable<Text>>>,
+        topics -> Array<Nullable<Text>>,
     }
 }
 

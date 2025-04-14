@@ -1,8 +1,16 @@
-pub mod get_cache_status;
-pub mod get_schedule;
-pub mod get_group;
-pub mod get_group_names;
-pub mod get_teacher;
-pub mod get_teacher_names;
+mod cache_status;
+mod group;
+mod group_names;
+mod schedule;
+mod teacher;
+mod teacher_names;
 mod schema;
-pub mod update_download_url;
+mod update_download_url;
+
+pub use cache_status::*;
+pub use group::*;
+pub use group_names::*;
+pub use schedule::*;
+pub use teacher::*;
+pub use teacher_names::*;
+pub use update_download_url::*;

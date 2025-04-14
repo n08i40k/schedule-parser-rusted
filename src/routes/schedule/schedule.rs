@@ -9,7 +9,7 @@ use actix_web::{get, web};
     (status = SERVICE_UNAVAILABLE, body = ResponseError<ErrorCode>)
 ))]
 #[get("/")]
-pub async fn get_schedule(app_state: web::Data<AppState>) -> ServiceResponse {
+pub async fn schedule(app_state: web::Data<AppState>) -> ServiceResponse {
     match ScheduleView::try_from(&app_state) {
         Ok(res) => Ok(res).into(),
         Err(e) => match e {

@@ -2,7 +2,7 @@ pub mod users {
     use crate::database::models::User;
     use crate::database::schema::users::dsl::users;
     use crate::database::schema::users::dsl::*;
-    use diesel::{ExpressionMethods, QueryResult, insert_into};
+    use diesel::{insert_into, ExpressionMethods, QueryResult};
     use diesel::{PgConnection, SelectableHelper};
     use diesel::{QueryDsl, RunQueryDsl};
     use std::ops::DerefMut;
@@ -31,10 +31,7 @@ pub mod users {
             .first(con)
     }
 
-    pub fn get_by_vk_id(
-        connection: &Mutex<PgConnection>,
-        _vk_id: i32,
-    ) -> QueryResult<User> {
+    pub fn get_by_vk_id(connection: &Mutex<PgConnection>, _vk_id: i32) -> QueryResult<User> {
         let mut lock = connection.lock().unwrap();
         let con = lock.deref_mut();
 
@@ -89,7 +86,7 @@ pub mod users {
             Err(_) => false,
         }
     }
-    
+
     #[cfg(test)]
     pub fn insert_or_ignore(connection: &Mutex<PgConnection>, user: &User) -> QueryResult<usize> {
         let mut lock = connection.lock().unwrap();
@@ -99,5 +96,23 @@ pub mod users {
             .values(user)
             .on_conflict_do_nothing()
             .execute(con)
+    }
+}
+
+pub mod fcm {
+    use crate::database::models::{User, FCM};
+    use diesel::QueryDsl;
+    use diesel::RunQueryDsl;
+    use diesel::{BelongingToDsl, PgConnection, QueryResult, SelectableHelper};
+    use std::ops::DerefMut;
+    use std::sync::Mutex;
+
+    pub fn from_user(connection: &Mutex<PgConnection>, user: &User) -> QueryResult<FCM> {
+        let mut lock = connection.lock().unwrap();
+        let con = lock.deref_mut();
+
+        FCM::belonging_to(&user)
+            .select(FCM::as_select())
+            .get_result(con)
     }
 }

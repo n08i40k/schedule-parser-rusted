@@ -6,7 +6,7 @@ use actix_web::{get, web};
     (status = OK, body = CacheStatus),
 ))]
 #[get("/cache-status")]
-pub async fn get_cache_status(app_state: web::Data<AppState>) -> CacheStatus {
+pub async fn cache_status(app_state: web::Data<AppState>) -> CacheStatus {
     // Prevent thread lock
     let has_schedule = app_state
         .schedule

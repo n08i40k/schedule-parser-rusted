@@ -1,6 +1,8 @@
 use self::schema::*;
-use crate::routes::schema::{IntoResponseAsError, ResponseError};
 use crate::AppState;
+use crate::database::models::User;
+use crate::extractors::base::SyncExtractor;
+use crate::routes::schema::{IntoResponseAsError, ResponseError};
 use actix_web::{get, web};
 
 #[utoipa::path(responses(
@@ -18,13 +20,13 @@ use actix_web::{get, web};
         body = ResponseError<ErrorCode>,
         example = json!({
             "code": "NOT_FOUND",
-            "message": "Required teacher not found."
+            "message": "Required group not found."
         })
     ),
 ))]
-#[get("/teacher/{name}")]
-pub async fn get_teacher(
-    name: web::Path<String>,
+#[get("/group")]
+pub async fn group(
+    user: SyncExtractor<User>,
     app_state: web::Data<AppState>,
 ) -> ServiceResponse {
     // Prevent thread lock
@@ -32,7 +34,7 @@ pub async fn get_teacher(
 
     match schedule_lock.as_ref() {
         None => ErrorCode::NoSchedule.into_response(),
-        Some(schedule) => match schedule.data.teachers.get(&name.into_inner()) {
+        Some(schedule) => match schedule.data.groups.get(&user.into_inner().group) {
             None => ErrorCode::NotFound.into_response(),
             Some(entry) => Ok(entry.clone().into()).into(),
         },
@@ -50,14 +52,14 @@ mod schema {
     pub type ServiceResponse = crate::routes::schema::Response<Response, ErrorCode>;
 
     #[derive(Serialize, ToSchema)]
-    #[schema(as = GetTeacher::Response)]
+    #[schema(as = GetGroup::Response)]
     #[serde(rename_all = "camelCase")]
     pub struct Response {
-        /// Расписание преподавателя
-        pub teacher: ScheduleEntry,
-
+        /// Расписание группы
+        pub group: ScheduleEntry,
+        
         /// Устаревшая переменная
-        ///
+        /// 
         /// По умолчанию возвращается пустой список
         #[deprecated = "Will be removed in future versions"]
         pub updated: Vec<i32>,
@@ -68,12 +70,12 @@ mod schema {
         #[deprecated = "Will be removed in future versions"]
         pub updated_at: DateTime<Utc>,
     }
-
+    
     #[allow(deprecated)]
     impl From<ScheduleEntry> for Response {
-        fn from(teacher: ScheduleEntry) -> Self {
+        fn from(group: ScheduleEntry) -> Self {
             Self {
-                teacher,
+                group,
                 updated: Vec::new(),
                 updated_at: NaiveDateTime::default().and_utc(),
             }
@@ -82,16 +84,16 @@ mod schema {
 
     #[derive(Clone, Serialize, ToSchema, StatusCode, Display, IntoResponseErrorNamed)]
     #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-    #[schema(as = TeacherSchedule::ErrorCode)]
+    #[schema(as = GroupSchedule::ErrorCode)]
     pub enum ErrorCode {
         /// Расписания ещё не получены
         #[status_code = "actix_web::http::StatusCode::SERVICE_UNAVAILABLE"]
         #[display("Schedule not parsed yet.")]
         NoSchedule,
 
-        /// Преподаватель не найден
+        /// Группа не найдена
         #[status_code = "actix_web::http::StatusCode::NOT_FOUND"]
-        #[display("Required teacher not found.")]
+        #[display("Required group not found.")]
         NotFound,
     }
 }

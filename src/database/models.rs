@@ -1,16 +1,11 @@
 use actix_macros::ResponderJson;
+use diesel::QueryId;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 #[derive(
-    diesel_derive_enum::DbEnum,
-    Serialize,
-    Deserialize,
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    utoipa::ToSchema,
+    Copy, Clone, PartialEq, Debug, Serialize, Deserialize, diesel_derive_enum::DbEnum, ToSchema,
 )]
 #[ExistingTypePath = "crate::database::schema::sql_types::UserRole"]
 #[DbValueStyle = "UPPERCASE"]
@@ -25,11 +20,12 @@ pub enum UserRole {
     Identifiable,
     AsChangeset,
     Queryable,
+    QueryId,
     Selectable,
     Serialize,
     Insertable,
     Debug,
-    utoipa::ToSchema,
+    ToSchema,
     ResponderJson,
 )]
 #[diesel(table_name = crate::database::schema::users)]
@@ -58,4 +54,30 @@ pub struct User {
 
     /// Версия установленного приложения Polytechnic+
     pub version: String,
+}
+
+#[derive(
+    Debug,
+    Serialize,
+    Identifiable,
+    Queryable,
+    Selectable,
+    Insertable,
+    AsChangeset,
+    Associations,
+    ToSchema,
+    ResponderJson,
+)]
+#[diesel(belongs_to(User))]
+#[diesel(table_name = crate::database::schema::fcm)]
+#[diesel(primary_key(user_id))]
+pub struct FCM {
+    /// UUID аккаунта.
+    pub user_id: String,
+
+    /// FCM токен.
+    pub token: String,
+
+    /// Список топиков, на которые подписан пользователь.
+    pub topics: Vec<Option<String>>,
 }
