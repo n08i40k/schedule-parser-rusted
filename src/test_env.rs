@@ -1,16 +1,16 @@
 #[cfg(test)]
 pub(crate) mod tests {
-    use crate::app_state::{app_state, AppState, Schedule};
+    use crate::app_state::{AppState, Schedule, app_state};
     use crate::parser::tests::test_result;
-    use actix_web::{web};
-    use std::sync::LazyLock;
+    use actix_web::web;
+    use tokio::sync::OnceCell;
 
     pub fn test_env() {
         dotenvy::from_path(".env.test").expect("Failed to load test environment file");
     }
 
-    pub fn test_app_state() -> web::Data<AppState> {
-        let state = app_state();
+    pub async fn test_app_state() -> web::Data<AppState> {
+        let state = app_state().await;
         let mut schedule_lock = state.schedule.lock().unwrap();
 
         *schedule_lock = Some(Schedule {
@@ -24,9 +24,9 @@ pub(crate) mod tests {
         state.clone()
     }
 
-    pub fn static_app_state() -> web::Data<AppState> {
-        static STATE: LazyLock<web::Data<AppState>> = LazyLock::new(|| test_app_state());
+    pub async fn static_app_state() -> web::Data<AppState> {
+        static STATE: OnceCell<web::Data<AppState>> = OnceCell::const_new();
 
-        STATE.clone()
+        STATE.get_or_init(|| test_app_state()).await.clone()
     }
 }

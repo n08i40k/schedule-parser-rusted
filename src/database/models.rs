@@ -58,6 +58,7 @@ pub struct User {
 
 #[derive(
     Debug,
+    Clone,
     Serialize,
     Identifiable,
     Queryable,

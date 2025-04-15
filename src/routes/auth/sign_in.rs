@@ -150,7 +150,7 @@ mod tests {
     use std::fmt::Write;
 
     async fn sign_in_client(data: Request) -> ServiceResponse {
-        let app = test_app(test_app_state(), sign_in).await;
+        let app = test_app(test_app_state().await, sign_in).await;
 
         let req = test::TestRequest::with_uri("/sign-in")
             .method(Method::POST)
@@ -160,7 +160,7 @@ mod tests {
         test::call_service(&app, req).await
     }
 
-    fn prepare(username: String) {
+    async fn prepare(username: String) {
         let id = {
             let mut sha = Sha1::new();
             sha.update(&username);
@@ -178,7 +178,7 @@ mod tests {
 
         test_env();
 
-        let app_state = static_app_state();
+        let app_state = static_app_state().await;
         driver::users::insert_or_ignore(
             &app_state,
             &User {
@@ -197,7 +197,7 @@ mod tests {
 
     #[actix_web::test]
     async fn sign_in_ok() {
-        prepare("test::sign_in_ok".to_string());
+        prepare("test::sign_in_ok".to_string()).await;
 
         let resp = sign_in_client(Request {
             username: "test::sign_in_ok".to_string(),
@@ -210,7 +210,7 @@ mod tests {
 
     #[actix_web::test]
     async fn sign_in_err() {
-        prepare("test::sign_in_err".to_string());
+        prepare("test::sign_in_err".to_string()).await;
 
         let invalid_username = sign_in_client(Request {
             username: "test::sign_in_err::username".to_string(),

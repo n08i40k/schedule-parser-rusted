@@ -258,7 +258,7 @@ mod tests {
     }
 
     async fn sign_up_client(data: SignUpPartial) -> ServiceResponse {
-        let app = test_app(test_app_state(), sign_up).await;
+        let app = test_app(test_app_state().await, sign_up).await;
 
         let req = test::TestRequest::with_uri("/sign-up")
             .method(Method::POST)
@@ -280,7 +280,7 @@ mod tests {
 
         test_env();
 
-        let app_state = static_app_state();
+        let app_state = static_app_state().await;
         driver::users::delete_by_username(&app_state, &"test::sign_up_valid".to_string());
 
         // test
@@ -301,7 +301,7 @@ mod tests {
 
         test_env();
 
-        let app_state = static_app_state();
+        let app_state = static_app_state().await;
         driver::users::delete_by_username(
             &app_state,
             &"test::sign_up_multiple".to_string(),

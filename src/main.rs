@@ -70,7 +70,7 @@ async fn main() {
     unsafe { std::env::set_var("RUST_LOG", "debug") };
     env_logger::init();
 
-    let app_state = app_state();
+    let app_state = app_state().await;
 
     HttpServer::new(move || {
         let (app, api) = App::new()

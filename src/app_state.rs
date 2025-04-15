@@ -4,6 +4,7 @@ use crate::xls_downloader::basic_impl::BasicXlsDownloader;
 use actix_web::web;
 use chrono::{DateTime, Utc};
 use diesel::{Connection, PgConnection};
+use firebase_messaging_rs::FCMClient;
 use sha1::{Digest, Sha1};
 use std::env;
 use std::hash::Hash;
@@ -55,10 +56,11 @@ pub struct AppState {
     pub schedule: Mutex<Option<Schedule>>,
     pub database: Mutex<PgConnection>,
     pub vk_id: VkId,
+    pub fcm_client: Mutex<FCMClient>,
 }
 
 impl AppState {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
         let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
         Self {
@@ -69,11 +71,12 @@ impl AppState {
                     .unwrap_or_else(|_| panic!("Error connecting to {}", database_url)),
             ),
             vk_id: VkId::new(),
+            fcm_client: Mutex::new(FCMClient::new().await.expect("FCM client must be created")),
         }
     }
 }
 
 /// Создание нового объекта web::Data<AppState>
-pub fn app_state() -> web::Data<AppState> {
-    web::Data::new(AppState::new())
+pub async fn app_state() -> web::Data<AppState> {
+    web::Data::new(AppState::new().await)
 }
