@@ -36,6 +36,7 @@ pub fn get_api_scope<
 
     let users_scope = utoipa_actix_web::scope("/users")
         .wrap(JWTAuthorization)
+        .service(routes::users::change_username)
         .service(routes::users::me);
 
     let schedule_scope = utoipa_actix_web::scope("/schedule")
