@@ -3,11 +3,11 @@ pub mod users {
     use crate::database::models::User;
     use crate::database::schema::users::dsl::users;
     use crate::database::schema::users::dsl::*;
-    use actix_web::web;
-    use diesel::SelectableHelper;
-    use diesel::{insert_into, ExpressionMethods, QueryResult};
-    use diesel::{QueryDsl, RunQueryDsl};
     use crate::utility::mutex::MutexScope;
+    use actix_web::web;
+    use diesel::{ExpressionMethods, QueryResult, insert_into};
+    use diesel::{QueryDsl, RunQueryDsl};
+    use diesel::{SaveChangesDsl, SelectableHelper};
 
     pub fn get(state: &web::Data<AppState>, _id: &String) -> QueryResult<User> {
         state.database.scope(|conn| {
@@ -69,7 +69,58 @@ pub mod users {
     }
 
     pub fn insert(state: &web::Data<AppState>, user: &User) -> QueryResult<usize> {
-        state.database.scope(|conn| insert_into(users).values(user).execute(conn))
+        state
+            .database
+            .scope(|conn| insert_into(users).values(user).execute(conn))
+    }
+
+    /// Function declaration [User::save][UserSave::save].
+    pub trait UserSave {
+        /// Saves the user's changes to the database.
+        ///
+        /// # Arguments
+        ///
+        /// * `state`: The state of the actix-web application that stores the mutex of the [connection][diesel::PgConnection].
+        ///
+        /// returns: `QueryResult<User>`
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// use crate::database::driver::users;
+        ///
+        /// #[derive(Deserialize)]
+        /// struct Params {
+        ///     pub username: String,
+        /// }
+        ///
+        /// #[patch("/")]
+        /// async fn patch_user(
+        ///     app_state: web::Data<AppState>,
+        ///     user: SyncExtractor<User>,
+        ///     web::Query(params): web::Query<Params>,
+        /// ) -> web::Json<User> {
+        ///     let mut user = user.into_inner();
+        ///
+        ///     user.username = params.username;
+        ///
+        ///     match user.save(&app_state) {
+        ///         Ok(user) => web::Json(user),
+        ///         Err(e) => {
+        ///             eprintln!("Failed to save user: {e}");
+        ///             panic!();
+        ///         }
+        ///     }
+        /// }
+        /// ```
+        fn save(&self, state: &web::Data<AppState>) -> QueryResult<User>;
+    }
+
+    /// Implementation of [UserSave][UserSave] trait.
+    impl UserSave for User {
+        fn save(&self, state: &web::Data<AppState>) -> QueryResult<User> {
+            state.database.scope(|conn| self.save_changes::<Self>(conn))
+        }
     }
 
     #[cfg(test)]
@@ -95,12 +146,12 @@ pub mod users {
 
 pub mod fcm {
     use crate::app_state::AppState;
-    use crate::database::models::{User, FCM};
+    use crate::database::models::{FCM, User};
+    use crate::utility::mutex::MutexScope;
     use actix_web::web;
     use diesel::QueryDsl;
     use diesel::RunQueryDsl;
     use diesel::{BelongingToDsl, QueryResult, SelectableHelper};
-    use crate::utility::mutex::MutexScope;
 
     pub fn from_user(state: &web::Data<AppState>, user: &User) -> QueryResult<FCM> {
         state.database.scope(|conn| {

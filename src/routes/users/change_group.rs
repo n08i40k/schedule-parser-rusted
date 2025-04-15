@@ -1,30 +1,39 @@
 use self::schema::*;
 use crate::app_state::AppState;
-use crate::database::driver;
 use crate::database::driver::users::UserSave;
 use crate::database::models::User;
 use crate::extractors::base::SyncExtractor;
 use crate::routes::schema::IntoResponseAsError;
+use crate::utility::mutex::MutexScope;
 use actix_web::{post, web};
 
 #[utoipa::path(responses((status = OK)))]
-#[post("/change-username")]
-pub async fn change_username(
+#[post("/change-group")]
+pub async fn change_group(
     app_state: web::Data<AppState>,
     user: SyncExtractor<User>,
     data: web::Json<Request>,
 ) -> ServiceResponse {
     let mut user = user.into_inner();
 
-    if user.username == data.username {
-        return ErrorCode::SameUsername.into_response();
+    if user.group == data.group {
+        return ErrorCode::SameGroup.into_response();
     }
 
-    if driver::users::get_by_username(&app_state, &data.username).is_ok() {
-        return ErrorCode::AlreadyExists.into_response();
+    if let Some(e) = app_state.schedule.scope(|schedule| match schedule {
+        Some(schedule) => {
+            if schedule.data.groups.contains_key(&data.group) {
+                None
+            } else {
+                Some(ErrorCode::NotFound)
+            }
+        }
+        None => Some(ErrorCode::NoSchedule),
+    }) {
+        return e.into_response();
     }
 
-    user.username = data.into_inner().username;
+    user.group = data.into_inner().group;
 
     if let Some(e) = user.save(&app_state).err() {
         eprintln!("Failed to update user: {e}");
@@ -43,24 +52,30 @@ mod schema {
     pub type ServiceResponse = crate::routes::schema::Response<(), ErrorCode>;
 
     #[derive(Serialize, Deserialize, ToSchema)]
-    #[schema(as = ChangeUsername::Request)]
+    #[schema(as = ChangeGroup::Request)]
     pub struct Request {
-        /// Новое имя.
-        pub username: String,
+        /// Название группы.
+        pub group: String,
     }
 
     #[derive(Clone, Serialize, ToSchema, StatusCode, Display, IntoResponseErrorNamed)]
     #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-    #[schema(as = ChangeUsername::ErrorCode)]
+    #[schema(as = ChangeGroup::ErrorCode)]
     #[status_code = "actix_web::http::StatusCode::CONFLICT"]
     pub enum ErrorCode {
-        /// Передано то же имя, что есть на данный момент.
-        #[display("Passed the same name as it is at the moment.")]
-        SameUsername,
+        /// Расписания ещё не получены.
+        #[display("Schedule not parsed yet.")]
+        #[status_code = "actix_web::http::StatusCode::SERVICE_UNAVAILABLE"]
+        NoSchedule,
 
-        /// Пользователь с таким именем уже существует.
-        #[display("A user with this name already exists.")]
-        AlreadyExists,
+        /// Передано то же название группы, что есть на данный момент.
+        #[display("Passed the same group name as it is at the moment.")]
+        SameGroup,
+
+        /// Требуемая группа не существует.
+        #[display("The required group does not exist.")]
+        #[status_code = "actix_web::http::StatusCode::NOT_FOUND"]
+        NotFound,
 
         /// Ошибка на стороне сервера.
         #[display("Internal server error.")]
