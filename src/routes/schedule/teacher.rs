@@ -53,18 +53,18 @@ mod schema {
     #[schema(as = GetTeacher::Response)]
     #[serde(rename_all = "camelCase")]
     pub struct Response {
-        /// Расписание преподавателя
+        /// Teacher's schedule.
         pub teacher: ScheduleEntry,
 
-        /// Устаревшая переменная
+        /// ## Deprecated variable.
         ///
-        /// По умолчанию возвращается пустой список
+        /// By default, an empty list is returned.
         #[deprecated = "Will be removed in future versions"]
         pub updated: Vec<i32>,
 
-        /// Устаревшая переменная
+        /// ## Deprecated variable.
         ///
-        /// По умолчанию начальная дата по Unix
+        /// Defaults to the Unix start date.
         #[deprecated = "Will be removed in future versions"]
         pub updated_at: DateTime<Utc>,
     }
@@ -84,12 +84,12 @@ mod schema {
     #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
     #[schema(as = TeacherSchedule::ErrorCode)]
     pub enum ErrorCode {
-        /// Расписания ещё не получены
+        /// Schedules have not yet been parsed.
         #[status_code = "actix_web::http::StatusCode::SERVICE_UNAVAILABLE"]
         #[display("Schedule not parsed yet.")]
         NoSchedule,
 
-        /// Преподаватель не найден
+        /// Teacher not found.
         #[status_code = "actix_web::http::StatusCode::NOT_FOUND"]
         #[display("Required teacher not found.")]
         NotFound,

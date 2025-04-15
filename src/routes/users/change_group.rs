@@ -54,7 +54,7 @@ mod schema {
     #[derive(Serialize, Deserialize, ToSchema)]
     #[schema(as = ChangeGroup::Request)]
     pub struct Request {
-        /// Название группы.
+        /// Group name.
         pub group: String,
     }
 
@@ -63,21 +63,21 @@ mod schema {
     #[schema(as = ChangeGroup::ErrorCode)]
     #[status_code = "actix_web::http::StatusCode::CONFLICT"]
     pub enum ErrorCode {
-        /// Расписания ещё не получены.
+        /// Schedules have not yet been received.
         #[display("Schedule not parsed yet.")]
         #[status_code = "actix_web::http::StatusCode::SERVICE_UNAVAILABLE"]
         NoSchedule,
 
-        /// Передано то же название группы, что есть на данный момент.
+        /// Passed the same group name that is currently there.
         #[display("Passed the same group name as it is at the moment.")]
         SameGroup,
 
-        /// Требуемая группа не существует.
+        /// The required group does not exist.
         #[display("The required group does not exist.")]
         #[status_code = "actix_web::http::StatusCode::NOT_FOUND"]
         NotFound,
 
-        /// Ошибка на стороне сервера.
+        /// Server-side error.
         #[display("Internal server error.")]
         #[status_code = "actix_web::http::StatusCode::INTERNAL_SERVER_ERROR"]
         InternalServerError,

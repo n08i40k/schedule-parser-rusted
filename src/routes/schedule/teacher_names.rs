@@ -35,7 +35,7 @@ mod schema {
     #[derive(Serialize, ToSchema)]
     #[schema(as = GetTeacherNames::Response)]
     pub struct Response {
-        /// Список имён преподавателей отсортированный в алфавитном порядке
+        /// List of teacher names sorted alphabetically.
         #[schema(examples(json!(["Хомченко Н.Е."])))]
         pub names: Vec<String>,
     }

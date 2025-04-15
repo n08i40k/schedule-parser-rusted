@@ -45,7 +45,7 @@ mod schema {
     #[derive(Serialize, Deserialize, ToSchema)]
     #[schema(as = ChangeUsername::Request)]
     pub struct Request {
-        /// Новое имя.
+        /// User name.
         pub username: String,
     }
 
@@ -54,15 +54,15 @@ mod schema {
     #[schema(as = ChangeUsername::ErrorCode)]
     #[status_code = "actix_web::http::StatusCode::CONFLICT"]
     pub enum ErrorCode {
-        /// Передано то же имя, что есть на данный момент.
+        /// The same name that is currently present is passed.
         #[display("Passed the same name as it is at the moment.")]
         SameUsername,
 
-        /// Пользователь с таким именем уже существует.
+        /// A user with this name already exists.
         #[display("A user with this name already exists.")]
         AlreadyExists,
 
-        /// Ошибка на стороне сервера.
+        /// Server-side error.
         #[display("Internal server error.")]
         #[status_code = "actix_web::http::StatusCode::INTERNAL_SERVER_ERROR"]
         InternalServerError,

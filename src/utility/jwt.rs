@@ -9,31 +9,31 @@ use std::env;
 use std::mem::discriminant;
 use std::sync::LazyLock;
 
-/// Ключ для верификации токена
+/// Key for token verification.
 static DECODING_KEY: LazyLock<DecodingKey> = LazyLock::new(|| {
     let secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
 
     DecodingKey::from_secret(secret.as_bytes())
 });
 
-/// Ключ для создания подписанного токена
+/// Key for creating a signed token.
 static ENCODING_KEY: LazyLock<EncodingKey> = LazyLock::new(|| {
     let secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
 
     EncodingKey::from_secret(secret.as_bytes())
 });
 
-/// Ошибки верификации токена
+/// Token verification errors.
 #[allow(dead_code)]
 #[derive(Debug)]
 pub enum Error {
-    /// Токен имеет другую подпись
+    /// The token has a different signature.
     InvalidSignature,
-    
-    /// Ошибка чтения токена
+
+    /// Token reading error.
     InvalidToken(ErrorKind),
-    
-    /// Токен просрочен
+
+    /// Token expired.
     Expired,
 }
 
@@ -43,26 +43,26 @@ impl PartialEq for Error {
     }
 }
 
-/// Данные, которые хранит в себе токен
+/// The data the token holds.
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
-    /// UUID аккаунта пользователя
+    /// User account UUID.
     id: String,
-    
-    /// Дата создания токена
+
+    /// Token creation date.
     #[serde_as(as = "DisplayFromStr")]
     iat: u64,
-    
-    /// Дата окончания действия токена
+
+    /// Token expiry date.
     #[serde_as(as = "DisplayFromStr")]
     exp: u64,
 }
 
-/// Алгоритм подписи токенов
+/// Token signing algorithm.
 pub(crate) const DEFAULT_ALGORITHM: Algorithm = Algorithm::HS256;
 
-/// Проверка токена и извлечение из него UUID аккаунта пользователя 
+/// Checking the token and extracting the UUID of the user account from it.
 pub fn verify_and_decode(token: &String) -> Result<String, Error> {
     let mut validation = Validation::new(DEFAULT_ALGORITHM);
 
@@ -87,7 +87,7 @@ pub fn verify_and_decode(token: &String) -> Result<String, Error> {
     }
 }
 
-/// Создание токена пользователя
+/// Creating a user token.
 pub fn encode(id: &String) -> String {
     let header = Header {
         typ: Some(String::from("JWT")),
@@ -132,6 +132,7 @@ mod tests {
         );
     }
 
+    //noinspection SpellCheckingInspection
     #[test]
     fn test_decode_invalid_signature() {
         test_env();
@@ -143,6 +144,7 @@ mod tests {
         assert_eq!(result.err().unwrap(), Error::InvalidSignature);
     }
 
+    //noinspection SpellCheckingInspection
     #[test]
     fn test_decode_expired() {
         test_env();
@@ -154,6 +156,7 @@ mod tests {
         assert_eq!(result.err().unwrap(), Error::Expired);
     }
 
+    //noinspection SpellCheckingInspection
     #[test]
     fn test_decode_ok() {
         test_env();

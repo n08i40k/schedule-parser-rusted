@@ -8,23 +8,23 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use utoipa::ToSchema;
 
-/// Ответ от сервера с расписаниями
+/// Response from schedule server.
 #[derive(Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ScheduleView {
-    /// ETag расписания на сервере политехникума
+    /// ETag schedules on polytechnic server.
     etag: String,
-    
-    /// Дата обновления расписания на сайте политехникума
+
+    /// Schedule update date on polytechnic website.
     uploaded_at: DateTime<Utc>,
-    
-    /// Дата последнего скачивания расписания с сервера политехникума
+
+    /// Date last downloaded from the Polytechnic server.
     downloaded_at: DateTime<Utc>,
-    
-    /// Расписание групп
+
+    /// Groups schedule.
     groups: HashMap<String, ScheduleEntry>,
-    
-    /// Расписание преподавателей
+
+    /// Teachers schedule.
     teachers: HashMap<String, ScheduleEntry>,
 }
 
@@ -33,7 +33,7 @@ pub struct ScheduleView {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[schema(as = ScheduleShared::ErrorCode)]
 pub enum ErrorCode {
-    /// Расписания ещё не получены
+    /// Schedules not yet parsed.
     #[display("Schedule not parsed yet.")]
     NoSchedule,
 }
@@ -56,22 +56,22 @@ impl TryFrom<&web::Data<AppState>> for ScheduleView {
     }
 }
 
-/// Статус кешированного расписаний
+/// Cached schedule status.
 #[derive(Serialize, Deserialize, ToSchema, ResponderJson)]
 #[serde(rename_all = "camelCase")]
 pub struct CacheStatus {
-    /// Хеш расписаний
+    /// Schedule hash.
     pub cache_hash: String,
-    
-    /// Требуется ли обновить ссылку на расписание
+
+    /// Whether the schedule reference needs to be updated.
     pub cache_update_required: bool,
-    
-    /// Дата последнего обновления кеша 
+
+    /// Last cache update date.
     pub last_cache_update: i64,
-    
-    /// Дата обновления кешированного расписания
-    /// 
-    /// Определяется сервером политехникума
+
+    /// Cached schedule update date.
+    ///
+    /// Determined by the polytechnic's server.
     pub last_schedule_update: i64,
 }
 

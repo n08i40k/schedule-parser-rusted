@@ -86,11 +86,11 @@ mod schema {
     #[derive(Deserialize, Serialize, ToSchema)]
     #[schema(as = SignIn::Request)]
     pub struct Request {
-        /// Имя пользователя
+        /// User name.
         #[schema(examples("n08i40k"))]
         pub username: String,
 
-        /// Пароль
+        /// Password.
         pub password: String,
     }
 
@@ -102,7 +102,7 @@ mod schema {
         #[serde(rename_all = "camelCase")]
         #[schema(as = SignInVk::Request)]
         pub struct Request {
-            /// Токен VK ID
+            /// VK ID token.
             pub access_token: String,
         }
     }
@@ -114,21 +114,21 @@ mod schema {
     #[schema(as = SignIn::ErrorCode)]
     #[status_code = "actix_web::http::StatusCode::NOT_ACCEPTABLE"]
     pub enum ErrorCode {
-        /// Некорректное имя пользователя или пароль
+        /// Incorrect username or password.
         IncorrectCredentials,
 
-        /// Недействительный токен VK ID
+        /// Invalid VK ID token.
         InvalidVkAccessToken,
     }
 
     /// Internal
 
-    /// Тип авторизации
+    /// Type of authorization.
     pub enum SignInData {
-        /// Имя пользователя и пароль
+        /// User and password name and password.
         Default(Request),
 
-        /// Идентификатор привязанного аккаунта VK
+        /// Identifier of the attached account VK.
         Vk(i32),
     }
 }

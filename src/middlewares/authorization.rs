@@ -7,7 +7,7 @@ use actix_web::{Error, HttpRequest, ResponseError};
 use futures_util::future::LocalBoxFuture;
 use std::future::{Ready, ready};
 
-/// Middleware guard работающий с токенами JWT
+/// Middleware guard working with JWT tokens.
 pub struct JWTAuthorization;
 
 impl<S, B> Transform<S, ServiceRequest> for JWTAuthorization
@@ -31,13 +31,13 @@ pub struct JWTAuthorizationMiddleware<S> {
     service: S,
 }
 
-/// Функция для проверки наличия и действительности токена в запросе, а так же существования пользователя к которому он привязан
 impl<S, B> JWTAuthorizationMiddleware<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
     S::Future: 'static,
     B: 'static,
 {
+    /// Checking the validity of the token.
     pub fn check_authorization(
         &self,
         req: &HttpRequest,

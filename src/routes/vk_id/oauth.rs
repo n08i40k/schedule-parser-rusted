@@ -84,13 +84,13 @@ mod schema {
     #[serde(rename_all = "camelCase")]
     #[schema(as = VkIdOAuth::Request)]
     pub struct Request {
-        /// Код подтверждения authorization_code
+        /// Код подтверждения authorization_code.
         pub code: String,
 
-        /// Параметр для защиты передаваемых данных
+        /// Parameter to protect transmitted data.
         pub code_verifier: String,
 
-        /// Идентификатор устройства
+        /// Device ID.
         pub device_id: String,
     }
 
@@ -98,7 +98,7 @@ mod schema {
     #[serde(rename_all = "camelCase")]
     #[schema(as = VkIdOAuth::Response)]
     pub struct Response {
-        /// ID токен
+        /// ID token.
         pub access_token: String,
     }
 
@@ -107,7 +107,7 @@ mod schema {
     #[schema(as = VkIdOAuth::ErrorCode)]
     #[status_code = "actix_web::http::StatusCode::NOT_ACCEPTABLE"]
     pub enum ErrorCode {
-        /// Сервер VK вернул ошибку
+        /// VK server returned an error.
         #[display("VK server returned an error")]
         VkIdError,
     }

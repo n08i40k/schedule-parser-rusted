@@ -84,7 +84,7 @@ mod schema {
 
     #[derive(Serialize, Deserialize, ToSchema)]
     pub struct Request {
-        /// Ссылка на расписание
+        /// Schedule link.
         pub url: String,
     }
 
@@ -92,25 +92,26 @@ mod schema {
     #[status_code = "actix_web::http::StatusCode::NOT_ACCEPTABLE"]
     #[schema(as = SetDownloadUrl::ErrorCode)]
     pub enum ErrorCode {
-        /// Передана ссылка с хостом отличающимся от politehnikum-eng.ru
+        /// Transferred link with host different from politehnikum-eng.ru.
         #[display("URL with unknown host provided. Provide url with politehnikum-eng.ru host.")]
         NonWhitelistedHost,
 
-        /// Не удалось получить мета-данные файла
+        /// Failed to retrieve file metadata.
         #[display("Unable to retrieve metadata from the specified URL.")]
         FetchFailed,
 
-        /// Не удалось скачать файл
+        /// Failed to download the file.
         #[display("Unable to retrieve data from the specified URL.")]
         DownloadFailed,
 
-        /// Ссылка ведёт на устаревшее расписание
+        /// The link leads to an outdated schedule.
         ///
-        /// Под устаревшим расписанием подразумевается расписание, которое было опубликовано раньше, чем уже имеется на данный момент
+        /// An outdated schedule refers to a schedule that was published earlier
+        /// than is currently available.
         #[display("The schedule is older than it already is.")]
         OutdatedSchedule,
 
-        /// Не удалось преобразовать расписание
+        /// Failed to parse the schedule.
         #[display("{}", "_0.display()")]
         InvalidSchedule(ParseError),
     }

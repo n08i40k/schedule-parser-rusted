@@ -16,19 +16,19 @@ use std::fmt::Debug;
 #[status_code = "actix_web::http::StatusCode::UNAUTHORIZED"]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Error {
-    /// В запросе отсутствует заголовок Authorization
+    /// There is no Authorization header in the request.
     #[display("No Authorization header found")]
     NoHeader,
 
-    /// Неизвестный тип авторизации, отличающийся от Bearer
+    /// Unknown authorization type other than Bearer.
     #[display("Bearer token is required")]
     UnknownAuthorizationType,
 
-    /// Токен не действителен
+    /// Invalid or expired access token.
     #[display("Invalid or expired access token")]
     InvalidAccessToken,
 
-    /// Пользователь привязанный к токену не найден в базе данных
+    /// The user bound to the token is not found in the database.
     #[display("No user associated with access token")]
     NoUser,
 }
@@ -39,7 +39,7 @@ impl Error {
     }
 }
 
-/// Экстрактор пользователя из запроса с токеном
+/// User extractor from request with Bearer access token.
 impl FromRequestSync for User {
     type Error = actix_web::Error;
 
@@ -87,7 +87,7 @@ impl<const FCM: bool> UserExtractor<{ FCM }> {
     }
 }
 
-/// Экстрактор пользователя и дополнительных параметров из запроса с токеном
+/// Extractor of user and additional parameters from request with Bearer token.
 impl<const FCM: bool> FromRequestSync for UserExtractor<{ FCM }> {
     type Error = actix_web::Error;
 

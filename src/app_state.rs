@@ -50,7 +50,7 @@ impl Schedule {
     }
 }
 
-/// Общие данные передаваемые в эндпоинты
+/// Common data provided to endpoints.
 pub struct AppState {
     pub downloader: Mutex<BasicXlsDownloader>,
     pub schedule: Mutex<Option<Schedule>>,
@@ -76,7 +76,7 @@ impl AppState {
     }
 }
 
-/// Создание нового объекта web::Data<AppState>
+/// Create a new object web::Data<AppState>.
 pub async fn app_state() -> web::Data<AppState> {
     web::Data::new(AppState::new().await)
 }

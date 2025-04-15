@@ -31,28 +31,28 @@ pub enum UserRole {
 #[diesel(table_name = crate::database::schema::users)]
 #[diesel(treat_none_as_null = true)]
 pub struct User {
-    /// UUID аккаунта
+    /// Account UUID.
     pub id: String,
 
-    /// Имя пользователя
+    /// User name.
     pub username: String,
 
-    /// BCrypt хеш пароля
+    /// BCrypt password hash.
     pub password: String,
 
-    /// Идентификатор привязанного аккаунта VK
+    /// ID of the linked VK account.
     pub vk_id: Option<i32>,
 
-    /// JWT токен доступа
+    /// JWT access token.
     pub access_token: String,
 
-    /// Группа
+    /// Group.
     pub group: String,
 
-    /// Роль
+    /// Role.
     pub role: UserRole,
 
-    /// Версия установленного приложения Polytechnic+
+    /// Version of the installed Polytechnic+ application.
     pub version: String,
 }
 
@@ -73,12 +73,12 @@ pub struct User {
 #[diesel(table_name = crate::database::schema::fcm)]
 #[diesel(primary_key(user_id))]
 pub struct FCM {
-    /// UUID аккаунта.
+    /// Account UUID.
     pub user_id: String,
 
-    /// FCM токен.
+    /// FCM token.
     pub token: String,
 
-    /// Список топиков, на которые подписан пользователь.
+    /// List of topics subscribed to by the user.
     pub topics: Vec<Option<String>>,
 }

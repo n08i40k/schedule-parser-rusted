@@ -112,7 +112,8 @@ pub mod user {
     use crate::database::models::{User, UserRole};
     use actix_macros::ResponderJson;
     use serde::Serialize;
-    
+
+    //noinspection SpellCheckingInspection
     /// Используется для скрытия чувствительных полей, таких как хеш пароля или FCM
     #[derive(Serialize, utoipa::ToSchema, ResponderJson)]
     #[serde(rename_all = "camelCase")]
@@ -132,7 +133,7 @@ pub mod user {
         /// Роль
         role: UserRole,
 
-        /// Идентификатор прявязанного аккаунта VK
+        /// Идентификатор привязанного аккаунта VK
         #[schema(examples(498094647, json!(null)))]
         vk_id: Option<i32>,
 

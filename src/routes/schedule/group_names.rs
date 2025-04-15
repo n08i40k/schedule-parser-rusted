@@ -35,7 +35,7 @@ mod schema {
     #[derive(Serialize, ToSchema)]
     #[schema(as = GetGroupNames::Response)]
     pub struct Response {
-        /// Список названий групп отсортированный в алфавитном порядке
+        /// List of group names sorted in alphabetical order.
         #[schema(examples(json!(["ИС-214/23"])))]
         pub names: Vec<String>,
     }

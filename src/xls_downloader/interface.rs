@@ -1,41 +1,41 @@
 use chrono::{DateTime, Utc};
 
-/// Ошибки получения данных XLS
+/// XLS data retrieval errors.
 #[derive(PartialEq, Debug)]
 pub enum FetchError {
-    /// Не установлена ссылка на файл
+    /// File url is not set.
     NoUrlProvided,
 
-    /// Неизвестная ошибка
+    /// Unknown error.
     Unknown,
 
-    /// Сервер вернул статус код отличающийся от 200
+    /// Server returned a status code different from 200.
     BadStatusCode,
 
-    /// Ссылка ведёт на файл другого типа
+    /// The url leads to a file of a different type.
     BadContentType,
 
-    /// Сервер не вернул ожидаемые заголовки
+    /// Server doesn't return expected headers.
     BadHeaders,
 }
 
-/// Результат получения данных XLS
+/// Result of XLS data retrieval.
 pub struct FetchOk {
-    /// ETag объекта
+    /// ETag object.
     pub etag: String,
 
-    /// Дата загрузки файла
+    /// File upload date.
     pub uploaded_at: DateTime<Utc>,
 
-    /// Дата получения данных
+    /// Date data received.
     pub requested_at: DateTime<Utc>,
 
-    /// Данные файла
+    /// File data.
     pub data: Option<Vec<u8>>,
 }
 
 impl FetchOk {
-    /// Результат без контента файла
+    /// Result without file content.
     pub fn head(etag: String, uploaded_at: DateTime<Utc>) -> Self {
         FetchOk {
             etag,
@@ -45,7 +45,7 @@ impl FetchOk {
         }
     }
 
-    /// Полный результат
+    /// Full result.
     pub fn get(etag: String, uploaded_at: DateTime<Utc>, data: Vec<u8>) -> Self {
         FetchOk {
             etag,
@@ -59,9 +59,9 @@ impl FetchOk {
 pub type FetchResult = Result<FetchOk, FetchError>;
 
 pub trait XLSDownloader {
-    /// Получение данных о файле, и, опционально, его контент
+    /// Get data about the file, and optionally its content.
     async fn fetch(&self, head: bool) -> FetchResult;
 
-    /// Установка ссылки на файл
+    /// Setting the file link.
     async fn set_url(&mut self, url: String) -> FetchResult;
 }

@@ -25,10 +25,7 @@ use actix_web::{get, web};
     ),
 ))]
 #[get("/group")]
-pub async fn group(
-    user: SyncExtractor<User>,
-    app_state: web::Data<AppState>,
-) -> ServiceResponse {
+pub async fn group(user: SyncExtractor<User>, app_state: web::Data<AppState>) -> ServiceResponse {
     // Prevent thread lock
     let schedule_lock = app_state.schedule.lock().unwrap();
 
@@ -55,22 +52,22 @@ mod schema {
     #[schema(as = GetGroup::Response)]
     #[serde(rename_all = "camelCase")]
     pub struct Response {
-        /// Расписание группы
+        /// Group schedule.
         pub group: ScheduleEntry,
-        
-        /// Устаревшая переменная
-        /// 
-        /// По умолчанию возвращается пустой список
+
+        /// ## Outdated variable.
+        ///
+        /// By default, an empty list is returned.
         #[deprecated = "Will be removed in future versions"]
         pub updated: Vec<i32>,
 
-        /// Устаревшая переменная
+        /// ## Outdated variable.
         ///
-        /// По умолчанию начальная дата по Unix
+        /// By default, the initial date for unix.
         #[deprecated = "Will be removed in future versions"]
         pub updated_at: DateTime<Utc>,
     }
-    
+
     #[allow(deprecated)]
     impl From<ScheduleEntry> for Response {
         fn from(group: ScheduleEntry) -> Self {
@@ -86,12 +83,12 @@ mod schema {
     #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
     #[schema(as = GroupSchedule::ErrorCode)]
     pub enum ErrorCode {
-        /// Расписания ещё не получены
+        /// Schedules have not yet been parsed.
         #[status_code = "actix_web::http::StatusCode::SERVICE_UNAVAILABLE"]
         #[display("Schedule not parsed yet.")]
         NoSchedule,
 
-        /// Группа не найдена
+        /// Group not found.
         #[status_code = "actix_web::http::StatusCode::NOT_FOUND"]
         #[display("Required group not found.")]
         NotFound,

@@ -6,137 +6,139 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use utoipa::ToSchema;
 
+/// The beginning and end of the lesson.
 #[derive(Clone, Hash, Debug, Serialize, Deserialize, ToSchema)]
 pub struct LessonTime {
-    /// Начало пары
+    /// The beginning of a lesson.
     pub start: DateTime<Utc>,
 
-    /// Конец пары
+    /// The end of the lesson.
     pub end: DateTime<Utc>,
 }
 
+/// Type of lesson.
 #[derive(Clone, Hash, PartialEq, Debug, Serialize_repr, Deserialize_repr, ToSchema)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[repr(u8)]
 pub enum LessonType {
-    /// Обычная
+    /// Обычная.
     Default = 0,
 
-    /// Допы
+    /// Допы.
     Additional,
 
-    /// Перемена
+    /// Перемена.
     Break,
 
-    /// Консультация
+    /// Консультация.
     Consultation,
 
-    /// Самостоятельная работа
+    /// Самостоятельная работа.
     IndependentWork,
 
-    /// Зачёт
+    /// Зачёт.
     Exam,
 
-    /// Зачет с оценкой
+    /// Зачёт с оценкой.
     ExamWithGrade,
 
-    /// Экзамен
+    /// Экзамен.
     ExamDefault,
 }
 
 #[derive(Clone, Hash, Debug, Serialize, Deserialize, ToSchema)]
 pub struct LessonSubGroup {
-    /// Номер подгруппы
+    /// Index of subgroup.
     pub number: u8,
 
-    /// Кабинет, если присутствует
+    /// Cabinet, if present.
     pub cabinet: Option<String>,
 
-    /// Фио преподавателя
+    /// Full name of the teacher.
     pub teacher: String,
 }
 
 #[derive(Clone, Hash, Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Lesson {
-    /// Тип занятия
+    /// Type.
     #[serde(rename = "type")]
     pub lesson_type: LessonType,
 
-    /// Индексы пар, если присутствуют
+    /// Lesson indexes, if present.
     pub default_range: Option<[u8; 2]>,
 
-    /// Название занятия
+    /// Name.
     pub name: Option<String>,
 
-    /// Начало и конец занятия
+    /// The beginning and end.
     pub time: LessonTime,
 
-    /// Список подгрупп
+    /// List of subgroups.
     #[serde(rename = "subGroups")]
     pub subgroups: Option<Vec<LessonSubGroup>>,
 
-    /// Группа, если это расписание для преподавателей
+    /// Group name, if this is a schedule for teachers.
     pub group: Option<String>,
 }
 
 #[derive(Clone, Hash, Debug, Serialize, Deserialize, ToSchema)]
 pub struct Day {
-    /// День недели
+    /// Day of the week.
     pub name: String,
 
-    /// Адрес другого корпуса
+    /// Address of another corps.
     pub street: Option<String>,
 
-    /// Дата
+    /// Date.
     pub date: DateTime<Utc>,
 
-    /// Список пар в этот день
+    /// List of lessons on this day.
     pub lessons: Vec<Lesson>,
 }
 
 #[derive(Clone, Hash, Debug, Serialize, Deserialize, ToSchema)]
 pub struct ScheduleEntry {
-    /// Название группы или ФИО преподавателя
+    /// The name of the group or name of the teacher.
     pub name: String,
 
-    /// Список из шести дней
+    /// List of six days.
     pub days: Vec<Day>,
 }
 
 #[derive(Clone)]
 pub struct ParseResult {
-    /// Список групп
+    /// List of groups.
     pub groups: HashMap<String, ScheduleEntry>,
 
-    /// Список преподавателей
+    /// List of teachers.
     pub teachers: HashMap<String, ScheduleEntry>,
 }
 
 #[derive(Debug, Display, Clone, ToSchema)]
 pub enum ParseError {
-    /// Ошибки связанные с чтением XLS файла.
+    /// Errors related to reading XLS file.
     #[display("{}: Failed to read XLS file.", "_0")]
     #[schema(value_type = String)]
     BadXLS(Arc<calamine::XlsError>),
 
-    /// Не найдено ни одного листа
+    /// Not a single sheet was found.
     #[display("No work sheets found.")]
     NoWorkSheets,
 
-    /// Отсутствуют данные об границах листа
+    /// There are no data on the boundaries of the sheet.
     #[display("There is no data on work sheet boundaries.")]
     UnknownWorkSheetRange,
 
-    /// Не удалось прочитать начало и конец пары из строки
+    /// Failed to read the beginning and end of the lesson from the line
     #[display("Failed to read lesson start and end times from string.")]
     GlobalTime,
 
-    /// Не найдены начало и конец соответствующее паре
+    /// Not found the beginning and the end corresponding to the lesson.
     #[display("No start and end times matching the lesson was found.")]
     LessonTimeNotFound,
 
-    /// Не удалось прочитать индекс подгруппы
+    /// Failed to read the subgroup index.
     #[display("Failed to read subgroup index.")]
     SubgroupIndexParsingFailed,
 }

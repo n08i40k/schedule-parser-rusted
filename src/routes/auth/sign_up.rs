@@ -50,10 +50,7 @@ async fn sign_up_combined(
     (status = NOT_ACCEPTABLE, body = ResponseError<ErrorCode>)
 ))]
 #[post("/sign-up")]
-pub async fn sign_up(
-    data_json: Json<Request>,
-    app_state: web::Data<AppState>,
-) -> ServiceResponse {
+pub async fn sign_up(data_json: Json<Request>, app_state: web::Data<AppState>) -> ServiceResponse {
     let data = data_json.into_inner();
 
     sign_up_combined(
@@ -124,21 +121,21 @@ mod schema {
     #[derive(Serialize, Deserialize, utoipa::ToSchema)]
     #[schema(as = SignUp::Request)]
     pub struct Request {
-        /// Имя пользователя
+        /// User name.
         #[schema(examples("n08i40k"))]
         pub username: String,
 
-        /// Пароль
+        /// Password.
         pub password: String,
 
-        /// Группа
+        /// Group.
         #[schema(examples("ИС-214/23"))]
         pub group: String,
 
-        /// Роль
+        /// Role.
         pub role: UserRole,
 
-        /// Версия установленного приложения Polytechnic+
+        /// Version of the installed Polytechnic+ application.
         #[schema(examples("3.0.0"))]
         pub version: String,
     }
@@ -151,21 +148,21 @@ mod schema {
         #[serde(rename_all = "camelCase")]
         #[schema(as = SignUpVk::Request)]
         pub struct Request {
-            /// Токен VK ID
+            /// VK ID token.
             pub access_token: String,
 
-            /// Имя пользователя
+            /// User name.
             #[schema(examples("n08i40k"))]
             pub username: String,
 
-            /// Группа
+            /// Group.
             #[schema(examples("ИС-214/23"))]
             pub group: String,
 
-            /// Роль
+            /// Role.
             pub role: UserRole,
 
-            /// Версия установленного приложения Polytechnic+
+            /// Version of the installed Polytechnic+ application.
             #[schema(examples("3.0.0"))]
             pub version: String,
         }
@@ -178,44 +175,44 @@ mod schema {
     #[schema(as = SignUp::ErrorCode)]
     #[status_code = "actix_web::http::StatusCode::NOT_ACCEPTABLE"]
     pub enum ErrorCode {
-        /// Передана роль ADMIN
+        /// Conveyed the role of Admin.
         DisallowedRole,
 
-        /// Неизвестное название группы
+        /// Unknown name of the group.
         InvalidGroupName,
 
-        /// Пользователь с таким именем уже зарегистрирован
+        /// User with this name is already registered.
         UsernameAlreadyExists,
 
-        /// Недействительный токен VK ID
+        /// Invalid VK ID token.
         InvalidVkAccessToken,
 
-        /// Пользователь с таким аккаунтом VK уже зарегистрирован
+        /// User with such an account VK is already registered.
         VkAlreadyExists,
     }
 
     /// Internal
 
-    /// Данные для регистрации
+    /// Data for registration.
     pub struct SignUpData {
-        /// Имя пользователя
+        /// User name.
         pub username: String,
 
-        /// Пароль
+        /// Password.
         ///
-        /// Должен присутствовать даже если регистрация происходит с помощью токена VK ID
+        /// Should be present even if registration occurs using the VK ID token.
         pub password: String,
 
-        /// Идентификатор аккаунта VK
+        /// Account identifier VK.
         pub vk_id: Option<i32>,
 
-        /// Группа
+        /// Group.
         pub group: String,
 
-        /// Роль
+        /// Role.
         pub role: UserRole,
 
-        /// Версия установленного приложения Polytechnic+
+        /// Version of the installed Polytechnic+ application.
         pub version: String,
     }
 
@@ -302,10 +299,7 @@ mod tests {
         test_env();
 
         let app_state = static_app_state().await;
-        driver::users::delete_by_username(
-            &app_state,
-            &"test::sign_up_multiple".to_string(),
-        );
+        driver::users::delete_by_username(&app_state, &"test::sign_up_multiple".to_string());
 
         let create = sign_up_client(SignUpPartial {
             username: "test::sign_up_multiple".to_string(),

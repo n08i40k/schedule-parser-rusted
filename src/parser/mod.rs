@@ -14,39 +14,37 @@ use std::sync::LazyLock;
 
 pub mod schema;
 
-/// Данные ячейке хранящей строку
+/// Data cell storing the line.
 struct InternalId {
-    /// Индекс строки
+    /// Line index.
     row: u32,
 
-    /// Индекс столбца
+    /// Column index.
     column: u32,
 
-    /**
-     * Текст в ячейке
-     */
+    /// Text in the cell.
     name: String,
 }
 
-/// Данные о времени проведения пар из второй колонки расписания
+/// Data on the time of lessons from the second column of the schedule.
 struct InternalTime {
-    /// Временной отрезок проведения пары
+    /// Temporary segment of the lesson.
     time_range: LessonTime,
 
-    /// Тип пары
+    /// Type of lesson.
     lesson_type: LessonType,
 
-    /// Индекс пары
+    /// The lesson index.
     default_index: Option<u32>,
 
-    /// Рамка ячейки
+    /// The frame of the cell.
     xls_range: ((u32, u32), (u32, u32)),
 }
 
-/// Сокращение типа рабочего листа
+/// Working sheet type alias.
 type WorkSheet = calamine::Range<calamine::Data>;
 
-/// Получение строки из требуемой ячейки
+/// Getting a line from the required cell.
 fn get_string_from_cell(worksheet: &WorkSheet, row: u32, col: u32) -> Option<String> {
     let cell_data = if let Some(data) = worksheet.get((row as usize, col as usize)) {
         data.to_string()
@@ -74,7 +72,7 @@ fn get_string_from_cell(worksheet: &WorkSheet, row: u32, col: u32) -> Option<Str
     }
 }
 
-/// Получение границ ячейки по её верхней левой координате
+/// Obtaining the boundaries of the cell along its upper left coordinate.
 fn get_merge_from_start(worksheet: &WorkSheet, row: u32, column: u32) -> ((u32, u32), (u32, u32)) {
     let worksheet_end = worksheet.end().unwrap();
 
@@ -109,7 +107,7 @@ fn get_merge_from_start(worksheet: &WorkSheet, row: u32, column: u32) -> ((u32, 
     ((row, column), (row_end, column_end))
 }
 
-/// Получение "скелета" расписания из рабочего листа
+/// Obtaining a "skeleton" schedule from the working sheet.
 fn parse_skeleton(worksheet: &WorkSheet) -> Result<(Vec<InternalId>, Vec<InternalId>), ParseError> {
     let range = &worksheet;
 
@@ -167,19 +165,20 @@ fn parse_skeleton(worksheet: &WorkSheet) -> Result<(Vec<InternalId>, Vec<Interna
     Ok((days, groups))
 }
 
-/// Результат получения пары из ячейки
+/// The result of obtaining a lesson from the cell.
 enum LessonParseResult {
-    /// Список пар длинной от одного до двух
+    /// List of lessons long from one to two.
     ///
-    /// Количество пар будет равно одному, если пара первая за день, иначе будет возвращен список из шаблона перемены и самой пары
+    /// The number of lessons will be equal to one if the couple is the first in the day,
+    /// otherwise the list from the change template and the lesson itself will be returned.
     Lessons(Vec<Lesson>),
-    
-    /// Улица на которой находится корпус политехникума
+
+    /// Street on which the Polytechnic Corps is located.
     Street(String),
 }
 
 trait StringInnerSlice {
-    /// Получения отрезка строки из строки по начальному и конечному индексу
+    /// Obtaining a line from the line on the initial and final index.
     fn inner_slice(&self, from: usize, to: usize) -> Self;
 }
 
@@ -192,7 +191,8 @@ impl StringInnerSlice for String {
     }
 }
 
-/// Получение нестандартного типа пары по названию
+// noinspection GrazieInspection
+/// Obtaining a non-standard type of lesson by name.
 fn guess_lesson_type(name: &String) -> Option<(String, LessonType)> {
     let map: HashMap<String, LessonType> = HashMap::from([
         ("(консультация)".to_string(), LessonType::Consultation),
@@ -234,7 +234,7 @@ fn guess_lesson_type(name: &String) -> Option<(String, LessonType)> {
     }
 }
 
-/// Получение пары или улицы из ячейки
+/// Getting a pair or street from a cell.
 fn parse_lesson(
     worksheet: &WorkSheet,
     day: &mut Day,
@@ -369,7 +369,7 @@ fn parse_lesson(
     ])))
 }
 
-/// Получение списка кабинетов справа от ячейки пары
+/// Obtaining a list of cabinets to the right of the lesson cell.
 fn parse_cabinets(worksheet: &WorkSheet, row: u32, column: u32) -> Vec<String> {
     let mut cabinets: Vec<String> = Vec::new();
 
@@ -387,7 +387,7 @@ fn parse_cabinets(worksheet: &WorkSheet, row: u32, column: u32) -> Vec<String> {
     cabinets
 }
 
-/// Получение "чистого" названия пары и списка преподавателей из текста ячейки пары
+/// Getting the "pure" name of the lesson and list of teachers from the text of the lesson cell.
 fn parse_name_and_subgroups(name: &String) -> Result<(String, Vec<LessonSubGroup>), ParseError> {
     static LESSON_RE: LazyLock<Regex, fn() -> Regex> =
         LazyLock::new(|| Regex::new(r"(?:[А-Я][а-я]+[А-Я]{2}(?:\([0-9][а-я]+\))?)+$").unwrap());
@@ -479,7 +479,7 @@ fn parse_name_and_subgroups(name: &String) -> Result<(String, Vec<LessonSubGroup
     Ok((lesson_name, subgroups))
 }
 
-/// Конвертация списка пар групп в список пар преподавателей
+/// Conversion of the list of couples of groups in the list of lessons of teachers.
 fn convert_groups_to_teachers(
     groups: &HashMap<String, ScheduleEntry>,
 ) -> HashMap<String, ScheduleEntry> {
@@ -556,7 +556,24 @@ fn convert_groups_to_teachers(
     teachers
 }
 
-/// Чтение XLS документа из буфера и преобразование его в готовые к использованию расписания
+/// Reading XLS Document from the buffer and converting it into the schedule ready to use.
+/// 
+/// # Arguments 
+/// 
+/// * `buffer`: XLS data containing schedule.
+/// 
+/// returns: Result<ParseResult, ParseError> 
+/// 
+/// # Examples 
+/// 
+/// ```
+/// let result = parse_xls(&include_bytes!("../../schedule.xls").to_vec());
+/// 
+/// assert!(result.is_ok());
+/// 
+/// assert_ne!(result.as_ref().unwrap().groups.len(), 0);
+/// assert_ne!(result.as_ref().unwrap().teachers.len(), 0);
+/// ```
 pub fn parse_xls(buffer: &Vec<u8>) -> Result<ParseResult, ParseError> {
     let cursor = Cursor::new(&buffer);
     let mut workbook: Xls<_> =
