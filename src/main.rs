@@ -50,7 +50,8 @@ pub fn get_api_scope<
 
     let fcm_scope = utoipa_actix_web::scope("/fcm")
         .wrap(JWTAuthorization)
-        .service(routes::fcm::update_callback);
+        .service(routes::fcm::update_callback)
+        .service(routes::fcm::set_token);
 
     let vk_id_scope = utoipa_actix_web::scope("/vkid") //
         .service(routes::vk_id::oauth);
