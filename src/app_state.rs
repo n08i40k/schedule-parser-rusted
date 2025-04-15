@@ -7,8 +7,7 @@ use diesel::{Connection, PgConnection};
 use sha1::{Digest, Sha1};
 use std::env;
 use std::hash::Hash;
-use std::ops::DerefMut;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::Mutex;
 
 #[derive(Clone)]
 pub struct Schedule {
@@ -71,23 +70,6 @@ impl AppState {
             ),
             vk_id: VkId::new(),
         }
-    }
-}
-
-impl AppState {
-    /// Получение объекта соединения с базой данных PostgreSQL
-    pub fn connection(&self) -> MutexGuard<PgConnection> {
-        self.database.lock().unwrap()
-    }
-
-    pub fn lock_connection<T, F>(&self, f: F) -> T
-    where
-        F: FnOnce(&mut PgConnection) -> T,
-    {
-        let mut lock = self.connection();
-        let conn = lock.deref_mut();
-
-        f(conn)
     }
 }
 

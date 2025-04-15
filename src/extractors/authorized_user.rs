@@ -63,7 +63,7 @@ impl FromRequestSync for User {
 
         let app_state = req.app_data::<web::Data<AppState>>().unwrap();
 
-        driver::users::get(&app_state.database, &user_id).map_err(|_| Error::NoUser.into())
+        driver::users::get(&app_state, &user_id).map_err(|_| Error::NoUser.into())
     }
 }
 
@@ -100,7 +100,7 @@ impl<const FCM: bool> FromRequestSync for UserExtractor<{ FCM }> {
 
         Ok(Self {
             fcm: if FCM {
-                driver::fcm::from_user(&app_state.database, &user).ok()
+                driver::fcm::from_user(&app_state, &user).ok()
             } else {
                 None
             },

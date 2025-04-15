@@ -5,10 +5,10 @@ use crate::routes::auth::shared::parse_vk_id;
 use crate::routes::auth::sign_in::schema::SignInData::{Default, Vk};
 use crate::routes::schema::user::UserResponse;
 use crate::routes::schema::{IntoResponseAsError, ResponseError};
-use crate::{utility, AppState};
+use crate::utility::mutex::MutexScope;
+use crate::{AppState, utility};
 use actix_web::{post, web};
 use diesel::SaveChangesDsl;
-use std::ops::DerefMut;
 use web::Json;
 
 async fn sign_in_combined(
@@ -16,8 +16,8 @@ async fn sign_in_combined(
     app_state: &web::Data<AppState>,
 ) -> Result<UserResponse, ErrorCode> {
     let user = match &data {
-        Default(data) => driver::users::get_by_username(&app_state.database, &data.username),
-        Vk(id) => driver::users::get_by_vk_id(&app_state.database, *id),
+        Default(data) => driver::users::get_by_username(&app_state, &data.username),
+        Vk(id) => driver::users::get_by_vk_id(&app_state, *id),
     };
 
     match user {
@@ -35,13 +35,12 @@ async fn sign_in_combined(
                 }
             }
 
-            let mut lock = app_state.connection();
-            let conn = lock.deref_mut();
-
             user.access_token = utility::jwt::encode(&user.id);
 
-            user.save_changes::<User>(conn)
-                .expect("Failed to update user");
+            app_state.database.scope(|conn| {
+                user.save_changes::<User>(conn)
+                    .expect("Failed to update user")
+            });
 
             Ok(user.into())
         }
@@ -56,7 +55,9 @@ async fn sign_in_combined(
 ))]
 #[post("/sign-in")]
 pub async fn sign_in(data: Json<Request>, app_state: web::Data<AppState>) -> ServiceResponse {
-    sign_in_combined(Default(data.into_inner()), &app_state).await.into()
+    sign_in_combined(Default(data.into_inner()), &app_state)
+        .await
+        .into()
 }
 
 #[utoipa::path(responses(
@@ -64,7 +65,10 @@ pub async fn sign_in(data: Json<Request>, app_state: web::Data<AppState>) -> Ser
     (status = NOT_ACCEPTABLE, body = ResponseError<ErrorCode>)
 ))]
 #[post("/sign-in-vk")]
-pub async fn sign_in_vk(data_json: Json<vk::Request>, app_state: web::Data<AppState>) -> ServiceResponse {
+pub async fn sign_in_vk(
+    data_json: Json<vk::Request>,
+    app_state: web::Data<AppState>,
+) -> ServiceResponse {
     let data = data_json.into_inner();
 
     match parse_vk_id(&data.access_token) {
@@ -85,7 +89,7 @@ mod schema {
         /// Имя пользователя
         #[schema(examples("n08i40k"))]
         pub username: String,
-        
+
         /// Пароль
         pub password: String,
     }
@@ -112,7 +116,7 @@ mod schema {
     pub enum ErrorCode {
         /// Некорректное имя пользователя или пароль
         IncorrectCredentials,
-        
+
         /// Недействительный токен VK ID
         InvalidVkAccessToken,
     }
@@ -123,8 +127,8 @@ mod schema {
     pub enum SignInData {
         /// Имя пользователя и пароль
         Default(Request),
-        
-        /// Идентификатор привязанного аккаунта VK 
+
+        /// Идентификатор привязанного аккаунта VK
         Vk(i32),
     }
 }
@@ -176,7 +180,7 @@ mod tests {
 
         let app_state = static_app_state();
         driver::users::insert_or_ignore(
-            &app_state.database,
+            &app_state,
             &User {
                 id: id.clone(),
                 username,

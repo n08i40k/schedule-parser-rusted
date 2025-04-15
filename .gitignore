@@ -4,3 +4,4 @@ schedule.json
 teachers.json
 
 .env*
+/*-firebase-adminsdk-*.json

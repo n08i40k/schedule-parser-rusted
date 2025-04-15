@@ -1,6 +1,7 @@
 use crate::app_state::AppState;
 use crate::database::models::User;
 use crate::extractors::base::SyncExtractor;
+use crate::utility::mutex::MutexScope;
 use actix_web::{HttpResponse, Responder, post, web};
 use diesel::SaveChangesDsl;
 
@@ -18,7 +19,10 @@ async fn update_callback(
 
     user.version = version.into_inner();
 
-    match app_state.lock_connection(|con| user.save_changes::<User>(con)) {
+    match app_state
+        .database
+        .scope(|conn| user.save_changes::<User>(conn))
+    {
         Ok(_) => HttpResponse::Ok(),
         Err(e) => {
             eprintln!("Failed to update user: {}", e);

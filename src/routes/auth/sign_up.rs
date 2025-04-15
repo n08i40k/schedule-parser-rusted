@@ -28,19 +28,19 @@ async fn sign_up_combined(
     }
 
     // If user with specified username already exists.
-    if driver::users::contains_by_username(&app_state.database, &data.username) {
+    if driver::users::contains_by_username(&app_state, &data.username) {
         return Err(ErrorCode::UsernameAlreadyExists);
     }
 
     // If user with specified VKID already exists.
     if let Some(id) = data.vk_id {
-        if driver::users::contains_by_vk_id(&app_state.database, id) {
+        if driver::users::contains_by_vk_id(&app_state, id) {
             return Err(ErrorCode::VkAlreadyExists);
         }
     }
 
     let user = data.into();
-    driver::users::insert(&app_state.database, &user).unwrap();
+    driver::users::insert(&app_state, &user).unwrap();
 
     Ok(UserResponse::from(&user)).into()
 }
@@ -281,7 +281,7 @@ mod tests {
         test_env();
 
         let app_state = static_app_state();
-        driver::users::delete_by_username(&app_state.database, &"test::sign_up_valid".to_string());
+        driver::users::delete_by_username(&app_state, &"test::sign_up_valid".to_string());
 
         // test
 
@@ -303,7 +303,7 @@ mod tests {
 
         let app_state = static_app_state();
         driver::users::delete_by_username(
-            &app_state.database,
+            &app_state,
             &"test::sign_up_multiple".to_string(),
         );
 

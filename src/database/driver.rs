@@ -1,118 +1,112 @@
 pub mod users {
+    use crate::app_state::AppState;
     use crate::database::models::User;
     use crate::database::schema::users::dsl::users;
     use crate::database::schema::users::dsl::*;
+    use actix_web::web;
+    use diesel::SelectableHelper;
     use diesel::{insert_into, ExpressionMethods, QueryResult};
-    use diesel::{PgConnection, SelectableHelper};
     use diesel::{QueryDsl, RunQueryDsl};
-    use std::ops::DerefMut;
-    use std::sync::Mutex;
+    use crate::utility::mutex::MutexScope;
 
-    pub fn get(connection: &Mutex<PgConnection>, _id: &String) -> QueryResult<User> {
-        let mut lock = connection.lock().unwrap();
-        let con = lock.deref_mut();
-
-        users
-            .filter(id.eq(_id))
-            .select(User::as_select())
-            .first(con)
+    pub fn get(state: &web::Data<AppState>, _id: &String) -> QueryResult<User> {
+        state.database.scope(|conn| {
+            users
+                .filter(id.eq(_id))
+                .select(User::as_select())
+                .first(conn)
+        })
     }
 
-    pub fn get_by_username(
-        connection: &Mutex<PgConnection>,
-        _username: &String,
-    ) -> QueryResult<User> {
-        let mut lock = connection.lock().unwrap();
-        let con = lock.deref_mut();
-
-        users
-            .filter(username.eq(_username))
-            .select(User::as_select())
-            .first(con)
+    pub fn get_by_username(state: &web::Data<AppState>, _username: &String) -> QueryResult<User> {
+        state.database.scope(|conn| {
+            users
+                .filter(username.eq(_username))
+                .select(User::as_select())
+                .first(conn)
+        })
     }
 
-    pub fn get_by_vk_id(connection: &Mutex<PgConnection>, _vk_id: i32) -> QueryResult<User> {
-        let mut lock = connection.lock().unwrap();
-        let con = lock.deref_mut();
-
-        users
-            .filter(vk_id.eq(_vk_id))
-            .select(User::as_select())
-            .first(con)
+    //noinspection RsTraitObligations
+    pub fn get_by_vk_id(state: &web::Data<AppState>, _vk_id: i32) -> QueryResult<User> {
+        state.database.scope(|conn| {
+            users
+                .filter(vk_id.eq(_vk_id))
+                .select(User::as_select())
+                .first(conn)
+        })
     }
 
-    pub fn contains_by_username(connection: &Mutex<PgConnection>, _username: &String) -> bool {
-        let mut lock = connection.lock().unwrap();
-        let con = lock.deref_mut();
-
-        match users
-            .filter(username.eq(_username))
-            .count()
-            .get_result::<i64>(con)
-        {
-            Ok(count) => count > 0,
-            Err(_) => false,
-        }
+    //noinspection DuplicatedCode
+    pub fn contains_by_username(state: &web::Data<AppState>, _username: &String) -> bool {
+        // и как это нахуй сократить блять примеров нихуя нет, нихуя не работает
+        // как меня этот раст заебал уже
+        state.database.scope(|conn| {
+            match users
+                .filter(username.eq(_username))
+                .count()
+                .get_result::<i64>(conn)
+            {
+                Ok(count) => count > 0,
+                Err(_) => false,
+            }
+        })
     }
 
-    pub fn contains_by_vk_id(connection: &Mutex<PgConnection>, _vk_id: i32) -> bool {
-        let mut lock = connection.lock().unwrap();
-        let con = lock.deref_mut();
-
-        match users
-            .filter(vk_id.eq(_vk_id))
-            .count()
-            .get_result::<i64>(con)
-        {
-            Ok(count) => count > 0,
-            Err(_) => false,
-        }
+    //noinspection DuplicatedCode
+    //noinspection RsTraitObligations
+    pub fn contains_by_vk_id(state: &web::Data<AppState>, _vk_id: i32) -> bool {
+        state.database.scope(|conn| {
+            match users
+                .filter(vk_id.eq(_vk_id))
+                .count()
+                .get_result::<i64>(conn)
+            {
+                Ok(count) => count > 0,
+                Err(_) => false,
+            }
+        })
     }
 
-    pub fn insert(connection: &Mutex<PgConnection>, user: &User) -> QueryResult<usize> {
-        let mut lock = connection.lock().unwrap();
-        let con = lock.deref_mut();
-
-        insert_into(users).values(user).execute(con)
+    pub fn insert(state: &web::Data<AppState>, user: &User) -> QueryResult<usize> {
+        state.database.scope(|conn| insert_into(users).values(user).execute(conn))
     }
 
     #[cfg(test)]
-    pub fn delete_by_username(connection: &Mutex<PgConnection>, _username: &String) -> bool {
-        let mut lock = connection.lock().unwrap();
-        let con = lock.deref_mut();
-
-        match diesel::delete(users.filter(username.eq(_username))).execute(con) {
-            Ok(count) => count > 0,
-            Err(_) => false,
-        }
+    pub fn delete_by_username(state: &web::Data<AppState>, _username: &String) -> bool {
+        state.database.scope(|conn| {
+            match diesel::delete(users.filter(username.eq(_username))).execute(conn) {
+                Ok(count) => count > 0,
+                Err(_) => false,
+            }
+        })
     }
 
     #[cfg(test)]
-    pub fn insert_or_ignore(connection: &Mutex<PgConnection>, user: &User) -> QueryResult<usize> {
-        let mut lock = connection.lock().unwrap();
-        let con = lock.deref_mut();
-
-        insert_into(users)
-            .values(user)
-            .on_conflict_do_nothing()
-            .execute(con)
+    pub fn insert_or_ignore(state: &web::Data<AppState>, user: &User) -> QueryResult<usize> {
+        state.database.scope(|conn| {
+            insert_into(users)
+                .values(user)
+                .on_conflict_do_nothing()
+                .execute(conn)
+        })
     }
 }
 
 pub mod fcm {
+    use crate::app_state::AppState;
     use crate::database::models::{User, FCM};
+    use actix_web::web;
     use diesel::QueryDsl;
     use diesel::RunQueryDsl;
-    use diesel::{BelongingToDsl, PgConnection, QueryResult, SelectableHelper};
-    use std::ops::DerefMut;
-    use std::sync::Mutex;
+    use diesel::{BelongingToDsl, QueryResult, SelectableHelper};
+    use crate::utility::mutex::MutexScope;
 
-    pub fn from_user(connection: &Mutex<PgConnection>, user: &User) -> QueryResult<FCM> {
-        let mut lock = connection.lock().unwrap();
-        let con = lock.deref_mut();
-
-        FCM::belonging_to(&user)
-            .select(FCM::as_select())
-            .get_result(con)
+    pub fn from_user(state: &web::Data<AppState>, user: &User) -> QueryResult<FCM> {
+        state.database.scope(|conn| {
+            FCM::belonging_to(&user)
+                .select(FCM::as_select())
+                .get_result(conn)
+        })
     }
 }
