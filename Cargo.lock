@@ -1097,7 +1097,7 @@ dependencies = [
 [[package]]
 name = "firebase-messaging-rs"
 version = "0.8.10"
-source = "git+ssh://git@github.com/i10416/firebase-messaging-rs.git#f2cb78b0bda33a41962a1a2ed178fb9c5be59e6a"
+source = "git+https://github.com/i10416/firebase-messaging-rs.git#f2cb78b0bda33a41962a1a2ed178fb9c5be59e6a"
 dependencies = [
  "async-trait",
  "chrono",
