@@ -35,13 +35,15 @@ pub fn get_api_scope<
         .service(routes::auth::sign_up_vk);
 
     let users_scope = utoipa_actix_web::scope("/users")
-        .wrap(JWTAuthorization)
+        .wrap(JWTAuthorization::default())
         .service(routes::users::change_group)
         .service(routes::users::change_username)
         .service(routes::users::me);
 
     let schedule_scope = utoipa_actix_web::scope("/schedule")
-        .wrap(JWTAuthorization)
+        .wrap(JWTAuthorization {
+            ignore: &["/group-names", "/teacher-names"],
+        })
         .service(routes::schedule::schedule)
         .service(routes::schedule::update_download_url)
         .service(routes::schedule::cache_status)
@@ -51,7 +53,7 @@ pub fn get_api_scope<
         .service(routes::schedule::teacher_names);
 
     let fcm_scope = utoipa_actix_web::scope("/fcm")
-        .wrap(JWTAuthorization)
+        .wrap(JWTAuthorization::default())
         .service(routes::fcm::update_callback)
         .service(routes::fcm::set_token);
 
