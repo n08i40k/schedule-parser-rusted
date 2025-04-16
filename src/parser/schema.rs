@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use derive_more::Display;
+use derive_more::{Display, Error};
 use serde::{Deserialize, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
@@ -115,10 +115,33 @@ pub struct ParseResult {
     pub teachers: HashMap<String, ScheduleEntry>,
 }
 
-#[derive(Debug, Display, Clone, ToSchema)]
+#[derive(Clone, Debug, Display, Error, ToSchema)]
+#[display("row {row}, column {column}")]
+pub struct ErrorCellPos {
+    pub row: u32,
+    pub column: u32,
+}
+
+#[derive(Clone, Debug, Display, Error, ToSchema)]
+#[display("'{data}' at {pos}")]
+pub struct ErrorCell {
+    pub pos: ErrorCellPos,
+    pub data: String,
+}
+
+impl ErrorCell {
+    pub fn new(row: u32, column: u32, data: String) -> Self {
+        Self {
+            pos: ErrorCellPos { row, column },
+            data,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Display, Error, ToSchema)]
 pub enum ParseError {
     /// Errors related to reading XLS file.
-    #[display("{}: Failed to read XLS file.", "_0")]
+    #[display("{_0:?}: Failed to read XLS file.")]
     #[schema(value_type = String)]
     BadXLS(Arc<calamine::XlsError>),
 
@@ -131,16 +154,12 @@ pub enum ParseError {
     UnknownWorkSheetRange,
 
     /// Failed to read the beginning and end of the lesson from the line
-    #[display("Failed to read lesson start and end times from string.")]
-    GlobalTime,
+    #[display("Failed to read lesson start and end times from {_0}.")]
+    GlobalTime(ErrorCell),
 
     /// Not found the beginning and the end corresponding to the lesson.
-    #[display("No start and end times matching the lesson was found.")]
-    LessonTimeNotFound,
-
-    /// Failed to read the subgroup index.
-    #[display("Failed to read subgroup index.")]
-    SubgroupIndexParsingFailed,
+    #[display("No start and end times matching the lesson (at {_0}) was found.")]
+    LessonTimeNotFound(ErrorCellPos),
 }
 
 impl Serialize for ParseError {
@@ -154,11 +173,8 @@ impl Serialize for ParseError {
             ParseError::UnknownWorkSheetRange => {
                 serializer.serialize_str("UNKNOWN_WORK_SHEET_RANGE")
             }
-            ParseError::GlobalTime => serializer.serialize_str("GLOBAL_TIME"),
-            ParseError::LessonTimeNotFound => serializer.serialize_str("LESSON_TIME_NOT_FOUND"),
-            ParseError::SubgroupIndexParsingFailed => {
-                serializer.serialize_str("SUBGROUP_INDEX_PARSING_FAILED")
-            }
+            ParseError::GlobalTime(_) => serializer.serialize_str("GLOBAL_TIME"),
+            ParseError::LessonTimeNotFound(_) => serializer.serialize_str("LESSON_TIME_NOT_FOUND"),
         }
     }
 }

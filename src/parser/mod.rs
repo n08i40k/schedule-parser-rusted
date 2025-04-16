@@ -1,12 +1,13 @@
+use crate::parser::LessonParseResult::{Lessons, Street};
 use crate::parser::schema::LessonType::Break;
 use crate::parser::schema::{
-    Day, Lesson, LessonSubGroup, LessonTime, LessonType, ParseError, ParseResult, ScheduleEntry,
+    Day, ErrorCell, ErrorCellPos, Lesson, LessonSubGroup, LessonTime, LessonType, ParseError,
+    ParseResult, ScheduleEntry,
 };
-use crate::parser::LessonParseResult::{Lessons, Street};
-use calamine::{open_workbook_from_rs, Reader, Xls};
+use calamine::{Reader, Xls, open_workbook_from_rs};
 use chrono::{DateTime, Duration, NaiveDateTime, Utc};
-use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
+use fuzzy_matcher::skim::SkimMatcherV2;
 use regex::Regex;
 use std::collections::HashMap;
 use std::io::Cursor;
@@ -56,9 +57,8 @@ fn get_string_from_cell(worksheet: &WorkSheet, row: u32, col: u32) -> Option<Str
         return None;
     }
 
-    static NL_RE: LazyLock<Regex, fn() -> Regex> =
-        LazyLock::new(|| Regex::new(r"[\n\r]+").unwrap());
-    static SP_RE: LazyLock<Regex, fn() -> Regex> = LazyLock::new(|| Regex::new(r"\s+").unwrap());
+    static NL_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[\n\r]+").unwrap());
+    static SP_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\s+").unwrap());
 
     let trimmed_data = SP_RE
         .replace_all(&NL_RE.replace_all(&cell_data, " "), " ")
@@ -252,7 +252,7 @@ fn parse_lesson(
 
         let raw_name = raw_name_opt.unwrap();
 
-        static OTHER_STREET_RE: LazyLock<Regex, fn() -> Regex> =
+        static OTHER_STREET_RE: LazyLock<Regex> =
             LazyLock::new(|| Regex::new(r"^[А-Я][а-я]+,?\s?[0-9]+$").unwrap());
 
         if OTHER_STREET_RE.is_match(&raw_name) {
@@ -275,7 +275,9 @@ fn parse_lesson(
             .filter(|time| time.xls_range.1.0 == cell_range.1.0)
             .collect::<Vec<&InternalTime>>();
 
-        let end_time = end_time_arr.first().ok_or(ParseError::LessonTimeNotFound)?;
+        let end_time = end_time_arr
+            .first()
+            .ok_or(ParseError::LessonTimeNotFound(ErrorCellPos { row, column }))?;
 
         let range: Option<[u8; 2]> = if time.default_index != None {
             let default = time.default_index.unwrap() as u8;
@@ -389,14 +391,12 @@ fn parse_cabinets(worksheet: &WorkSheet, row: u32, column: u32) -> Vec<String> {
 
 /// Getting the "pure" name of the lesson and list of teachers from the text of the lesson cell.
 fn parse_name_and_subgroups(name: &String) -> Result<(String, Vec<LessonSubGroup>), ParseError> {
-    static LESSON_RE: LazyLock<Regex, fn() -> Regex> =
+    static LESSON_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?:[А-Я][а-я]+[А-Я]{2}(?:\([0-9][а-я]+\))?)+$").unwrap());
-    static TEACHER_RE: LazyLock<Regex, fn() -> Regex> =
+    static TEACHER_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"([А-Я][а-я]+)([А-Я])([А-Я])(?:\(([0-9])[а-я]+\))?").unwrap());
-    static CLEAN_RE: LazyLock<Regex, fn() -> Regex> =
-        LazyLock::new(|| Regex::new(r"[\s.,]+").unwrap());
-    static END_CLEAN_RE: LazyLock<Regex, fn() -> Regex> =
-        LazyLock::new(|| Regex::new(r"[.\s]+$").unwrap());
+    static CLEAN_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[\s.,]+").unwrap());
+    static END_CLEAN_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[.\s]+$").unwrap());
 
     let (teachers, lesson_name) = {
         let clean_name = CLEAN_RE.replace_all(&name, "").to_string();
@@ -423,14 +423,9 @@ fn parse_name_and_subgroups(name: &String) -> Result<(String, Vec<LessonSubGroup
 
     for captures in teacher_it {
         subgroups.push(LessonSubGroup {
-            number: if let Some(capture) = captures.get(4) {
-                capture
-                    .as_str()
-                    .to_string()
-                    .parse::<u8>()
-                    .map_err(|_| ParseError::SubgroupIndexParsingFailed)?
-            } else {
-                0
+            number: match captures.get(4) {
+                Some(capture) => capture.as_str().to_string().parse::<u8>().unwrap(),
+                None => 0,
             },
             cabinet: None,
             teacher: format!(
@@ -665,10 +660,12 @@ pub fn parse_xls(buffer: &Vec<u8>) -> Result<ParseResult, ParseError> {
 
                     // time
                     let time_range = {
-                        static TIME_RE: LazyLock<Regex, fn() -> Regex> =
+                        static TIME_RE: LazyLock<Regex> =
                             LazyLock::new(|| Regex::new(r"(\d+\.\d+)-(\d+\.\d+)").unwrap());
 
-                        let parse_res = TIME_RE.captures(&time).ok_or(ParseError::GlobalTime)?;
+                        let parse_res = TIME_RE.captures(&time).ok_or(ParseError::GlobalTime(
+                            ErrorCell::new(row, lesson_time_column, time.clone()),
+                        ))?;
 
                         let start_match = parse_res.get(1).unwrap().as_str();
                         let start_parts: Vec<&str> = start_match.split(".").collect();

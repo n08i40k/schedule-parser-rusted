@@ -4,6 +4,7 @@ use crate::middlewares::content_type::ContentTypeBootstrap;
 use actix_web::dev::{ServiceFactory, ServiceRequest};
 use actix_web::{App, Error, HttpServer};
 use dotenvy::dotenv;
+use std::io;
 use utoipa_actix_web::AppExt;
 use utoipa_actix_web::scope::Scope;
 use utoipa_rapidoc::RapiDoc;
@@ -69,12 +70,8 @@ pub fn get_api_scope<
         .service(vk_id_scope)
 }
 
-#[actix_web::main]
-async fn main() {
-    dotenv().ok();
-
-    unsafe { std::env::set_var("RUST_LOG", "debug") };
-    env_logger::init();
+async fn async_main() -> io::Result<()> {
+    println!("Starting server...");
 
     let app_state = app_state().await;
 
@@ -82,7 +79,11 @@ async fn main() {
         let (app, api) = App::new()
             .into_utoipa_app()
             .app_data(app_state.clone())
-            .service(get_api_scope("/api/v1").wrap(ContentTypeBootstrap))
+            .service(
+                get_api_scope("/api/v1")
+                    .wrap(sentry_actix::Sentry::new())
+                    .wrap(ContentTypeBootstrap),
+            )
             .split_for_parts();
 
         let rapidoc_service = RapiDoc::with_openapi("/api-docs-json", api).path("/api-docs");
@@ -96,9 +97,28 @@ async fn main() {
         app.service(rapidoc_service.custom_html(patched_rapidoc_html))
     })
     .workers(4)
-    .bind(("0.0.0.0", 5050))
-    .unwrap()
+    .bind(("0.0.0.0", 5050))?
     .run()
     .await
-    .unwrap();
+}
+
+fn main() -> io::Result<()> {
+    let _guard = sentry::init((
+        "https://9c33db76e89984b3f009b28a9f4b5954@sentry.n08i40k.ru/8",
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            send_default_pii: true,
+            ..Default::default()
+        },
+    ));
+
+    unsafe { std::env::set_var("RUST_BACKTRACE", "1") };
+
+    dotenv().unwrap();
+
+    env_logger::init();
+
+    actix_web::rt::System::new().block_on(async { async_main().await })?;
+
+    Ok(())
 }

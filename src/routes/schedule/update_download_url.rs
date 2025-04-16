@@ -41,7 +41,7 @@ pub async fn update_download_url(
             }
 
             match downloader.fetch(false).await {
-                Ok(download_result) => match parse_xls(download_result.data.as_ref().unwrap()) {
+                Ok(download_result) => match parse_xls(&download_result.data.unwrap()) {
                     Ok(data) => {
                         *schedule = Some(Schedule {
                             etag: download_result.etag,
@@ -53,7 +53,11 @@ pub async fn update_download_url(
 
                         Ok(CacheStatus::from(schedule.as_ref().unwrap())).into()
                     }
-                    Err(error) => ErrorCode::InvalidSchedule(error).into_response(),
+                    Err(error) => {
+                        sentry::capture_error(&error);
+
+                        ErrorCode::InvalidSchedule(error).into_response()
+                    }
                 },
                 Err(error) => {
                     eprintln!("Unknown url provided {}", data.url);
@@ -93,7 +97,7 @@ mod schema {
     #[schema(as = SetDownloadUrl::ErrorCode)]
     pub enum ErrorCode {
         /// Transferred link with host different from politehnikum-eng.ru.
-        #[display("URL with unknown host provided. Provide url with politehnikum-eng.ru host.")]
+        #[display("URL with unknown host provided. Provide url with 'politehnikum-eng.ru' host.")]
         NonWhitelistedHost,
 
         /// Failed to retrieve file metadata.
@@ -112,7 +116,7 @@ mod schema {
         OutdatedSchedule,
 
         /// Failed to parse the schedule.
-        #[display("{}", "_0.display()")]
+        #[display("{_0}")]
         InvalidSchedule(ParseError),
     }
 
