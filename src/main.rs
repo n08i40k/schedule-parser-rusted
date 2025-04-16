@@ -1,5 +1,6 @@
 use crate::app_state::{AppState, app_state};
 use crate::middlewares::authorization::JWTAuthorization;
+use crate::middlewares::content_type::ContentTypeBootstrap;
 use actix_web::dev::{ServiceFactory, ServiceRequest};
 use actix_web::{App, Error, HttpServer};
 use dotenvy::dotenv;
@@ -81,7 +82,7 @@ async fn main() {
         let (app, api) = App::new()
             .into_utoipa_app()
             .app_data(app_state.clone())
-            .service(get_api_scope("/api/v1"))
+            .service(get_api_scope("/api/v1").wrap(ContentTypeBootstrap))
             .split_for_parts();
 
         let rapidoc_service = RapiDoc::with_openapi("/api-docs-json", api).path("/api-docs");
@@ -95,7 +96,7 @@ async fn main() {
         app.service(rapidoc_service.custom_html(patched_rapidoc_html))
     })
     .workers(4)
-    .bind(("0.0.0.0", 8080))
+    .bind(("0.0.0.0", 5050))
     .unwrap()
     .run()
     .await
