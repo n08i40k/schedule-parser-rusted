@@ -1,12 +1,12 @@
-use crate::parser::LessonParseResult::{Lessons, Street};
 use crate::parser::schema::LessonType::Break;
 use crate::parser::schema::{
     Day, Lesson, LessonSubGroup, LessonTime, LessonType, ParseError, ParseResult, ScheduleEntry,
 };
-use calamine::{Reader, Xls, open_workbook_from_rs};
-use chrono::{Duration, NaiveDateTime};
-use fuzzy_matcher::FuzzyMatcher;
+use crate::parser::LessonParseResult::{Lessons, Street};
+use calamine::{open_workbook_from_rs, Reader, Xls};
+use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 use fuzzy_matcher::skim::SkimMatcherV2;
+use fuzzy_matcher::FuzzyMatcher;
 use regex::Regex;
 use std::collections::HashMap;
 use std::io::Cursor;
@@ -557,20 +557,20 @@ fn convert_groups_to_teachers(
 }
 
 /// Reading XLS Document from the buffer and converting it into the schedule ready to use.
-/// 
-/// # Arguments 
-/// 
+///
+/// # Arguments
+///
 /// * `buffer`: XLS data containing schedule.
-/// 
-/// returns: Result<ParseResult, ParseError> 
-/// 
-/// # Examples 
-/// 
+///
+/// returns: Result<ParseResult, ParseError>
+///
+/// # Examples
+///
 /// ```
 /// let result = parse_xls(&include_bytes!("../../schedule.xls").to_vec());
-/// 
+///
 /// assert!(result.is_ok());
-/// 
+///
 /// assert_ne!(result.as_ref().unwrap().groups.len(), 0);
 /// assert_ne!(result.as_ref().unwrap().teachers.len(), 0);
 /// ```
@@ -674,13 +674,15 @@ pub fn parse_xls(buffer: &Vec<u8>) -> Result<ParseResult, ParseError> {
                         let end_match = parse_res.get(2).unwrap().as_str();
                         let end_parts: Vec<&str> = end_match.split(".").collect();
 
+                        static GET_TIME: fn(DateTime<Utc>, &Vec<&str>) -> DateTime<Utc> =
+                            |date, parts| {
+                                date + Duration::hours(parts[0].parse::<i64>().unwrap() - 4)
+                                    + Duration::minutes(parts[1].parse::<i64>().unwrap())
+                            };
+
                         LessonTime {
-                            start: day.date.clone()
-                                + Duration::hours(start_parts[0].parse().unwrap())
-                                + Duration::minutes(start_parts[1].parse().unwrap()),
-                            end: day.date.clone()
-                                + Duration::hours(end_parts[0].parse().unwrap())
-                                + Duration::minutes(end_parts[1].parse().unwrap()),
+                            start: GET_TIME(day.date.clone(), &start_parts),
+                            end: GET_TIME(day.date.clone(), &end_parts),
                         }
                     };
 
