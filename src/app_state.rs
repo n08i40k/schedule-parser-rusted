@@ -56,7 +56,7 @@ pub struct AppState {
     pub schedule: Mutex<Option<Schedule>>,
     pub database: Mutex<PgConnection>,
     pub vk_id: VkId,
-    pub fcm_client: Mutex<FCMClient>,
+    pub fcm_client: Option<Mutex<FCMClient>>, // в рантайме не меняется, так что опционален мьютекс, а не данные в нём.
 }
 
 impl AppState {
@@ -71,7 +71,13 @@ impl AppState {
                     .unwrap_or_else(|_| panic!("Error connecting to {}", database_url)),
             ),
             vk_id: VkId::new(),
-            fcm_client: Mutex::new(FCMClient::new().await.expect("FCM client must be created")),
+            fcm_client: if env::var("GOOGLE_APPLICATION_CREDENTIALS").is_ok() {
+                Some(Mutex::new(
+                    FCMClient::new().await.expect("FCM client must be created"),
+                ))
+            } else {
+                None
+            },
         }
     }
 }

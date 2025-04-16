@@ -78,6 +78,8 @@ pub async fn set_token(
     // Subscribe to default topics.
     if let Some(e) = app_state
         .fcm_client
+        .as_ref()
+        .unwrap()
         .async_scope(
             async |client: &mut FCMClient| -> Result<(), TopicManagementError> {
                 let mut tokens: Vec<String> = Vec::new();

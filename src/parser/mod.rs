@@ -567,6 +567,8 @@ fn convert_groups_to_teachers(
 /// # Examples
 ///
 /// ```
+/// use schedule_parser_rusted::parser::parse_xls;
+///
 /// let result = parse_xls(&include_bytes!("../../schedule.xls").to_vec());
 ///
 /// assert!(result.is_ok());
