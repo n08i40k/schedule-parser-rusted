@@ -3,6 +3,7 @@ name: cargo test
 on:
   push:
     branches: [ "master" ]
+    tags-ignore: [ "release/v*" ]
 
 permissions:
   contents: read
