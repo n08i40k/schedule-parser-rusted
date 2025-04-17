@@ -1,13 +1,14 @@
 use chrono::{DateTime, Utc};
+use std::mem::discriminant;
 
 /// XLS data retrieval errors.
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
 pub enum FetchError {
     /// File url is not set.
     NoUrlProvided,
 
     /// Unknown error.
-    Unknown,
+    Unknown(reqwest::Error),
 
     /// Server returned a status code different from 200.
     BadStatusCode,
@@ -17,6 +18,12 @@ pub enum FetchError {
 
     /// Server doesn't return expected headers.
     BadHeaders,
+}
+
+impl PartialEq for FetchError {
+    fn eq(&self, other: &Self) -> bool {
+        discriminant(self) == discriminant(other)
+    }
 }
 
 /// Result of XLS data retrieval.

@@ -4,7 +4,7 @@ use crate::app_state::Schedule;
 use crate::parser::parse_xls;
 use crate::routes::schedule::schema::CacheStatus;
 use crate::routes::schema::{IntoResponseAsError, ResponseError};
-use crate::xls_downloader::interface::XLSDownloader;
+use crate::xls_downloader::interface::{FetchError, XLSDownloader};
 use actix_web::web::Json;
 use actix_web::{patch, web};
 use chrono::Utc;
@@ -60,16 +60,18 @@ pub async fn update_download_url(
                     }
                 },
                 Err(error) => {
-                    eprintln!("Unknown url provided {}", data.url);
-                    eprintln!("{:?}", error);
+                    if let FetchError::Unknown(error) = error {
+                        sentry::capture_error(&error);
+                    }
 
                     ErrorCode::DownloadFailed.into_response()
                 }
             }
         }
         Err(error) => {
-            eprintln!("Unknown url provided {}", data.url);
-            eprintln!("{:?}", error);
+            if let FetchError::Unknown(error) = error {
+                sentry::capture_error(&error);
+            }
 
             ErrorCode::FetchFailed.into_response()
         }

@@ -1,11 +1,13 @@
 use crate::xls_downloader::interface::{FetchError, FetchOk, FetchResult, XLSDownloader};
 use chrono::{DateTime, Utc};
+use std::env;
 
 pub struct BasicXlsDownloader {
     pub url: Option<String>,
+    user_agent: String,
 }
 
-async fn fetch_specified(url: &String, user_agent: String, head: bool) -> FetchResult {
+async fn fetch_specified(url: &String, user_agent: &String, head: bool) -> FetchResult {
     let client = reqwest::Client::new();
 
     let response = if head {
@@ -13,7 +15,7 @@ async fn fetch_specified(url: &String, user_agent: String, head: bool) -> FetchR
     } else {
         client.get(url)
     }
-    .header("User-Agent", user_agent)
+    .header("User-Agent", user_agent.clone())
     .send()
     .await;
 
@@ -49,13 +51,16 @@ async fn fetch_specified(url: &String, user_agent: String, head: bool) -> FetchR
                 })
             }
         }
-        Err(_) => Err(FetchError::Unknown),
+        Err(e) => Err(FetchError::Unknown(e)),
     }
 }
 
 impl BasicXlsDownloader {
     pub fn new() -> Self {
-        BasicXlsDownloader { url: None }
+        BasicXlsDownloader {
+            url: None,
+            user_agent: env::var("REQWEST_USER_AGENT").expect("USER_AGENT must be set"),
+        }
     }
 }
 
@@ -64,17 +69,12 @@ impl XLSDownloader for BasicXlsDownloader {
         if self.url.is_none() {
             Err(FetchError::NoUrlProvided)
         } else {
-            fetch_specified(
-                self.url.as_ref().unwrap(),
-                "t.me/polytechnic_next".to_string(),
-                head,
-            )
-            .await
+            fetch_specified(self.url.as_ref().unwrap(), &self.user_agent, head).await
         }
     }
 
     async fn set_url(&mut self, url: String) -> FetchResult {
-        let result = fetch_specified(&url, "t.me/polytechnic_next".to_string(), true).await;
+        let result = fetch_specified(&url, &self.user_agent, true).await;
 
         if let Ok(_) = result {
             self.url = Some(url);
@@ -95,8 +95,8 @@ mod tests {
         let user_agent = String::new();
 
         let results = [
-            fetch_specified(&url, user_agent.clone(), true).await,
-            fetch_specified(&url, user_agent.clone(), false).await,
+            fetch_specified(&url, &user_agent, true).await,
+            fetch_specified(&url, &user_agent, false).await,
         ];
 
         assert!(results[0].is_err());
@@ -109,8 +109,8 @@ mod tests {
         let user_agent = String::new();
 
         let results = [
-            fetch_specified(&url, user_agent.clone(), true).await,
-            fetch_specified(&url, user_agent.clone(), false).await,
+            fetch_specified(&url, &user_agent, true).await,
+            fetch_specified(&url, &user_agent, false).await,
         ];
 
         assert!(results[0].is_err());
@@ -132,8 +132,8 @@ mod tests {
         let user_agent = String::new();
 
         let results = [
-            fetch_specified(&url, user_agent.clone(), true).await,
-            fetch_specified(&url, user_agent.clone(), false).await,
+            fetch_specified(&url, &user_agent, true).await,
+            fetch_specified(&url, &user_agent, false).await,
         ];
 
         assert!(results[0].is_err());
@@ -149,8 +149,8 @@ mod tests {
         let user_agent = String::new();
 
         let results = [
-            fetch_specified(&url, user_agent.clone(), true).await,
-            fetch_specified(&url, user_agent.clone(), false).await,
+            fetch_specified(&url, &user_agent, true).await,
+            fetch_specified(&url, &user_agent, false).await,
         ];
 
         assert!(results[0].is_err());
@@ -172,8 +172,8 @@ mod tests {
         let user_agent = String::new();
 
         let results = [
-            fetch_specified(&url, user_agent.clone(), true).await,
-            fetch_specified(&url, user_agent.clone(), false).await,
+            fetch_specified(&url, &user_agent, true).await,
+            fetch_specified(&url, &user_agent, false).await,
         ];
 
         assert!(results[0].is_ok());

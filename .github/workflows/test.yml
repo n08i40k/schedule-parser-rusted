@@ -28,3 +28,4 @@ jobs:
           JWT_SECRET: "test-secret-at-least-256-bits-used"
           VKID_CLIENT_ID: 0
           VKID_REDIRECT_URI: "vk0://vk.com/blank.html"
+          REQWEST_USER_AGENT: "Dalvik/2.1.0 (Linux; U; Android 6.0.1; OPPO R9s Build/MMB29M)"
