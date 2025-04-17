@@ -14,7 +14,7 @@ bcrypt = "0.17.0"
 calamine = "0.26.1"
 chrono = { version = "0.4.40", features = ["serde"] }
 derive_more = "2.0.1"
-diesel = { version = "2.2.8", features = ["postgres"] }
+diesel = { version = "2.2.9", features = ["postgres"] }
 diesel-derive-enum = { git = "https://github.com/Havunen/diesel-derive-enum.git", features = ["postgres"] }
 dotenvy = "0.15.7"
 env_logger = "0.11.7"
