@@ -1,6 +1,7 @@
 use crate::xls_downloader::interface::{FetchError, FetchOk, FetchResult, XLSDownloader};
 use chrono::{DateTime, Utc};
 use std::env;
+use std::sync::Arc;
 
 pub struct BasicXlsDownloader {
     pub url: Option<String>,
@@ -22,7 +23,7 @@ async fn fetch_specified(url: &String, user_agent: &String, head: bool) -> Fetch
     match response {
         Ok(r) => {
             if r.status().as_u16() != 200 {
-                return Err(FetchError::BadStatusCode);
+                return Err(FetchError::BadStatusCode(r.status().as_u16()));
             }
 
             let headers = r.headers();
@@ -32,11 +33,18 @@ async fn fetch_specified(url: &String, user_agent: &String, head: bool) -> Fetch
             let last_modified = headers.get("last-modified");
             let date = headers.get("date");
 
-            if content_type.is_none() || etag.is_none() || last_modified.is_none() || date.is_none()
-            {
-                Err(FetchError::BadHeaders)
+            if content_type.is_none() {
+                Err(FetchError::BadHeaders("Content-Type".to_string()))
+            } else if etag.is_none() {
+                Err(FetchError::BadHeaders("ETag".to_string()))
+            } else if last_modified.is_none() {
+                Err(FetchError::BadHeaders("Last-Modified".to_string()))
+            } else if date.is_none() {
+                Err(FetchError::BadHeaders("Date".to_string()))
             } else if content_type.unwrap() != "application/vnd.ms-excel" {
-                Err(FetchError::BadContentType)
+                Err(FetchError::BadContentType(
+                    content_type.unwrap().to_str().unwrap().to_string(),
+                ))
             } else {
                 let etag = etag.unwrap().to_str().unwrap().to_string();
                 let last_modified =
@@ -51,7 +59,7 @@ async fn fetch_specified(url: &String, user_agent: &String, head: bool) -> Fetch
                 })
             }
         }
-        Err(e) => Err(FetchError::Unknown(e)),
+        Err(error) => Err(FetchError::Unknown(Arc::new(error))),
     }
 }
 
@@ -86,7 +94,7 @@ impl XLSDownloader for BasicXlsDownloader {
 
 #[cfg(test)]
 mod tests {
-    use crate::xls_downloader::basic_impl::{BasicXlsDownloader, fetch_specified};
+    use crate::xls_downloader::basic_impl::{fetch_specified, BasicXlsDownloader};
     use crate::xls_downloader::interface::{FetchError, XLSDownloader};
 
     #[tokio::test]
@@ -116,14 +124,10 @@ mod tests {
         assert!(results[0].is_err());
         assert!(results[1].is_err());
 
-        assert_eq!(
-            *results[0].as_ref().err().unwrap(),
-            FetchError::BadStatusCode
-        );
-        assert_eq!(
-            *results[1].as_ref().err().unwrap(),
-            FetchError::BadStatusCode
-        );
+        let expected_error = FetchError::BadStatusCode(404);
+
+        assert_eq!(*results[0].as_ref().err().unwrap(), expected_error);
+        assert_eq!(*results[1].as_ref().err().unwrap(), expected_error);
     }
 
     #[tokio::test]
@@ -139,8 +143,10 @@ mod tests {
         assert!(results[0].is_err());
         assert!(results[1].is_err());
 
-        assert_eq!(*results[0].as_ref().err().unwrap(), FetchError::BadHeaders);
-        assert_eq!(*results[1].as_ref().err().unwrap(), FetchError::BadHeaders);
+        let expected_error = FetchError::BadHeaders("ETag".to_string());
+
+        assert_eq!(*results[0].as_ref().err().unwrap(), expected_error);
+        assert_eq!(*results[1].as_ref().err().unwrap(), expected_error);
     }
 
     #[tokio::test]
@@ -155,15 +161,6 @@ mod tests {
 
         assert!(results[0].is_err());
         assert!(results[1].is_err());
-
-        assert_eq!(
-            *results[0].as_ref().err().unwrap(),
-            FetchError::BadContentType
-        );
-        assert_eq!(
-            *results[1].as_ref().err().unwrap(),
-            FetchError::BadContentType
-        );
     }
 
     #[tokio::test]

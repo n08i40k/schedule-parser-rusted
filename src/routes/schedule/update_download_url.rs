@@ -60,20 +60,20 @@ pub async fn update_download_url(
                     }
                 },
                 Err(error) => {
-                    if let FetchError::Unknown(error) = error {
+                    if let FetchError::Unknown(error) = &error {
                         sentry::capture_error(&error);
                     }
 
-                    ErrorCode::DownloadFailed.into_response()
+                    ErrorCode::DownloadFailed(error).into_response()
                 }
             }
         }
         Err(error) => {
-            if let FetchError::Unknown(error) = error {
+            if let FetchError::Unknown(error) = &error {
                 sentry::capture_error(&error);
             }
 
-            ErrorCode::FetchFailed.into_response()
+            ErrorCode::FetchFailed(error).into_response()
         }
     }
 }
@@ -85,6 +85,7 @@ mod schema {
     use derive_more::Display;
     use serde::{Deserialize, Serialize, Serializer};
     use utoipa::ToSchema;
+    use crate::xls_downloader::interface::FetchError;
 
     pub type ServiceResponse = crate::routes::schema::Response<CacheStatus, ErrorCode>;
 
@@ -103,12 +104,12 @@ mod schema {
         NonWhitelistedHost,
 
         /// Failed to retrieve file metadata.
-        #[display("Unable to retrieve metadata from the specified URL.")]
-        FetchFailed,
+        #[display("Unable to retrieve metadata from the specified URL: {_0}")]
+        FetchFailed(FetchError),
 
         /// Failed to download the file.
-        #[display("Unable to retrieve data from the specified URL.")]
-        DownloadFailed,
+        #[display("Unable to retrieve data from the specified URL: {_0}")]
+        DownloadFailed(FetchError),
 
         /// The link leads to an outdated schedule.
         ///
@@ -129,8 +130,8 @@ mod schema {
         {
             match self {
                 ErrorCode::NonWhitelistedHost => serializer.serialize_str("NON_WHITELISTED_HOST"),
-                ErrorCode::FetchFailed => serializer.serialize_str("FETCH_FAILED"),
-                ErrorCode::DownloadFailed => serializer.serialize_str("DOWNLOAD_FAILED"),
+                ErrorCode::FetchFailed(_) => serializer.serialize_str("FETCH_FAILED"),
+                ErrorCode::DownloadFailed(_) => serializer.serialize_str("DOWNLOAD_FAILED"),
                 ErrorCode::OutdatedSchedule => serializer.serialize_str("OUTDATED_SCHEDULE"),
                 ErrorCode::InvalidSchedule(_) => serializer.serialize_str("INVALID_SCHEDULE"),
             }
