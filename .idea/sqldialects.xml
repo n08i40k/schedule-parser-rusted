@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project version="4">
-  <component name="SqlDialectMappings">
-    <file url="file://$PROJECT_DIR$/migrations/2025-03-21-211822_create_user_role/down.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/migrations/2025-03-21-212111_create_users/up.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/migrations/2025-03-21-212723_create_fcm/down.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/migrations/2025-03-21-212723_create_fcm/up.sql" dialect="PostgreSQL" />
-  </component>
-</project>
