@@ -59,13 +59,16 @@ async fn oauth(data: web::Json<Request>, app_state: web::Data<AppState>) -> Serv
                 return ErrorCode::VkIdError.into_response();
             }
 
-            if let Ok(auth_data) = res.json::<VkIdAuthResponse>().await {
-                Ok(Response {
-                    access_token: auth_data.id_token,
-                })
-                .into()
-            } else {
-                ErrorCode::VkIdError.into_response()
+            match res.json::<VkIdAuthResponse>().await {
+                Ok(auth_data) =>
+                    Ok(Response {
+                        access_token: auth_data.id_token,
+                    }).into(),
+                Err(error) => {
+                    sentry::capture_error(&error);
+                    
+                    ErrorCode::VkIdError.into_response()
+                }
             }
         }
         Err(_) => ErrorCode::VkIdError.into_response(),

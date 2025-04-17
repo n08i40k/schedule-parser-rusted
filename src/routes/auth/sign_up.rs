@@ -79,7 +79,7 @@ pub async fn sign_up_vk(
 ) -> ServiceResponse {
     let data = data_json.into_inner();
 
-    match parse_vk_id(&data.access_token) {
+    match parse_vk_id(&data.access_token, app_state.vk_id.client_id) {
         Ok(id) => sign_up_combined(
             SignUpData {
                 username: data.username,

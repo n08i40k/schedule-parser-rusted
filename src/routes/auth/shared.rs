@@ -1,9 +1,6 @@
-use crate::utility::jwt::DEFAULT_ALGORITHM;
 use jsonwebtoken::errors::ErrorKind;
-use jsonwebtoken::{decode, DecodingKey, Validation};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
-use std::env;
-use std::sync::LazyLock;
 
 #[derive(Deserialize, Serialize)]
 struct TokenData {
@@ -17,7 +14,7 @@ struct TokenData {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
-    sub: String,
+    sub: i32,
     iis: String,
     jti: i32,
     app: i32,
@@ -52,17 +49,10 @@ const VK_PUBLIC_KEY: &str = concat!(
     "-----END PUBLIC KEY-----"
 );
 
-static VK_ID_CLIENT_ID: LazyLock<i32> = LazyLock::new(|| {
-    env::var("VK_ID_CLIENT_ID")
-        .expect("VK_ID_CLIENT_ID must be set")
-        .parse::<i32>()
-        .expect("VK_ID_CLIENT_ID must be i32")
-});
-
-pub fn parse_vk_id(token_str: &String) -> Result<i32, Error> {
+pub fn parse_vk_id(token_str: &String, client_id: i32) -> Result<i32, Error> {
     let dkey = DecodingKey::from_rsa_pem(VK_PUBLIC_KEY.as_bytes()).unwrap();
 
-    match decode::<Claims>(&token_str, &dkey, &Validation::new(DEFAULT_ALGORITHM)) {
+    match decode::<Claims>(&token_str, &dkey, &Validation::new(Algorithm::RS256)) {
         Ok(token_data) => {
             let claims = token_data.claims;
 
@@ -70,13 +60,10 @@ pub fn parse_vk_id(token_str: &String) -> Result<i32, Error> {
                 Err(Error::UnknownIssuer(claims.iis))
             } else if claims.jti != 21 {
                 Err(Error::UnknownType(claims.jti))
-            } else if claims.app != *VK_ID_CLIENT_ID {
+            } else if claims.app != client_id {
                 Err(Error::UnknownClientId(claims.app))
             } else {
-                match claims.sub.parse::<i32>() {
-                    Ok(sub) => Ok(sub),
-                    Err(_) => Err(Error::InvalidToken),
-                }
+                Ok(claims.sub)
             }
         }
         Err(err) => Err(match err.into_kind() {

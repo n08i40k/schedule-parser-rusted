@@ -71,7 +71,7 @@ pub async fn sign_in_vk(
 ) -> ServiceResponse {
     let data = data_json.into_inner();
 
-    match parse_vk_id(&data.access_token) {
+    match parse_vk_id(&data.access_token, app_state.vk_id.client_id) {
         Ok(id) => sign_in_combined(Vk(id), &app_state).await.into(),
         Err(_) => ErrorCode::InvalidVkAccessToken.into_response(),
     }
