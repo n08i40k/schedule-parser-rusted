@@ -2,9 +2,9 @@ mod cache_status;
 mod group;
 mod group_names;
 mod schedule;
+mod schema;
 mod teacher;
 mod teacher_names;
-mod schema;
 mod update_download_url;
 
 pub use cache_status::*;

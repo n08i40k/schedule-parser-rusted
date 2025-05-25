@@ -255,7 +255,7 @@ mod tests {
     }
 
     async fn sign_up_client(data: SignUpPartial) -> ServiceResponse {
-        let app = test_app(test_app_state().await, sign_up).await;
+        let app = test_app(test_app_state(Default::default()).await, sign_up).await;
 
         let req = test::TestRequest::with_uri("/sign-up")
             .method(Method::POST)

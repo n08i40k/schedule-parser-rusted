@@ -150,7 +150,7 @@ mod tests {
     use std::fmt::Write;
 
     async fn sign_in_client(data: Request) -> ServiceResponse {
-        let app = test_app(test_app_state().await, sign_in).await;
+        let app = test_app(test_app_state(Default::default()).await, sign_in).await;
 
         let req = test::TestRequest::with_uri("/sign-in")
             .method(Method::POST)
