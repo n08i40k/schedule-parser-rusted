@@ -241,7 +241,9 @@ mod tests {
     use crate::database::models::UserRole;
     use crate::routes::auth::sign_up::schema::Request;
     use crate::routes::auth::sign_up::sign_up;
-    use crate::test_env::tests::{static_app_state, test_app_state, test_env};
+    use crate::test_env::tests::{
+        TestAppStateParams, TestScheduleType, static_app_state, test_app_state, test_env,
+    };
     use actix_test::test_app;
     use actix_web::dev::ServiceResponse;
     use actix_web::http::Method;
@@ -252,10 +254,22 @@ mod tests {
         username: String,
         group: String,
         role: UserRole,
+        load_schedule: bool,
     }
 
     async fn sign_up_client(data: SignUpPartial) -> ServiceResponse {
-        let app = test_app(test_app_state(Default::default()).await, sign_up).await;
+        let app = test_app(
+            test_app_state(TestAppStateParams {
+                schedule: if data.load_schedule {
+                    TestScheduleType::Local
+                } else {
+                    TestScheduleType::None
+                },
+            })
+            .await,
+            sign_up,
+        )
+        .await;
 
         let req = test::TestRequest::with_uri("/sign-up")
             .method(Method::POST)
@@ -286,6 +300,7 @@ mod tests {
             username: "test::sign_up_valid".to_string(),
             group: "ИС-214/23".to_string(),
             role: UserRole::Student,
+            load_schedule: false,
         })
         .await;
 
@@ -305,6 +320,7 @@ mod tests {
             username: "test::sign_up_multiple".to_string(),
             group: "ИС-214/23".to_string(),
             role: UserRole::Student,
+            load_schedule: false,
         })
         .await;
 
@@ -314,6 +330,7 @@ mod tests {
             username: "test::sign_up_multiple".to_string(),
             group: "ИС-214/23".to_string(),
             role: UserRole::Student,
+            load_schedule: false,
         })
         .await;
 
@@ -329,6 +346,7 @@ mod tests {
             username: "test::sign_up_invalid_role".to_string(),
             group: "ИС-214/23".to_string(),
             role: UserRole::Admin,
+            load_schedule: false,
         })
         .await;
 
@@ -344,6 +362,7 @@ mod tests {
             username: "test::sign_up_invalid_group".to_string(),
             group: "invalid_group".to_string(),
             role: UserRole::Student,
+            load_schedule: true,
         })
         .await;
 
