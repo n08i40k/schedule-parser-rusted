@@ -99,7 +99,7 @@ impl From<&Schedule> for CacheStatus {
     fn from(value: &Schedule) -> Self {
         Self {
             cache_hash: value.hash(),
-            cache_update_required: (value.fetched_at - Utc::now()) > Duration::minutes(5),
+            cache_update_required: (Utc::now() - value.fetched_at) > Duration::minutes(5),
             last_cache_update: value.fetched_at.timestamp(),
             last_schedule_update: value.updated_at.timestamp(),
         }
