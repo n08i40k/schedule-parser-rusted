@@ -112,8 +112,6 @@ fn main() -> io::Result<()> {
         },
     ));
 
-    unsafe { std::env::set_var("RUST_BACKTRACE", "1") };
-
     dotenv().unwrap();
 
     env_logger::init();
