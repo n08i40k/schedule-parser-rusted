@@ -40,7 +40,7 @@ pub async fn teacher(
 }
 
 mod schema {
-    use crate::parser::schema::ScheduleEntry;
+    use schedule_parser::schema::ScheduleEntry;
     use actix_macros::{IntoResponseErrorNamed, StatusCode};
     use chrono::{DateTime, NaiveDateTime, Utc};
     use derive_more::Display;

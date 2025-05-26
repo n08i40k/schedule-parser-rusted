@@ -39,7 +39,7 @@ pub async fn group(user: SyncExtractor<User>, app_state: web::Data<AppState>) ->
 }
 
 mod schema {
-    use crate::parser::schema::ScheduleEntry;
+    use schedule_parser::schema::ScheduleEntry;
     use actix_macros::{IntoResponseErrorNamed, StatusCode};
     use chrono::{DateTime, NaiveDateTime, Utc};
     use derive_more::Display;

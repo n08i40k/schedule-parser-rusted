@@ -1,4 +1,4 @@
-use crate::parser::schema::ParseResult;
+use schedule_parser::schema::ParseResult;
 use crate::utility::hasher::DigestHasher;
 use crate::xls_downloader::basic_impl::BasicXlsDownloader;
 use actix_web::web;

@@ -8,7 +8,7 @@ use utoipa::ToSchema;
 
 /// The beginning and end of the lesson.
 #[derive(Clone, Hash, Debug, Serialize, Deserialize, ToSchema)]
-pub struct LessonTime {
+pub struct LessonBoundaries {
     /// The beginning of a lesson.
     pub start: DateTime<Utc>,
 
@@ -72,7 +72,7 @@ pub struct Lesson {
     pub name: Option<String>,
 
     /// The beginning and end.
-    pub time: LessonTime,
+    pub time: LessonBoundaries,
 
     /// List of subgroups.
     #[serde(rename = "subGroups")]
@@ -153,9 +153,9 @@ pub enum ParseError {
     #[display("There is no data on work sheet boundaries.")]
     UnknownWorkSheetRange,
 
-    /// Failed to read the beginning and end of the lesson from the line
-    #[display("Failed to read lesson start and end times from {_0}.")]
-    GlobalTime(ErrorCell),
+    /// Failed to read the beginning and end of the lesson from the cell
+    #[display("Failed to read lesson start and end from {_0}.")]
+    LessonBoundaries(ErrorCell),
 
     /// Not found the beginning and the end corresponding to the lesson.
     #[display("No start and end times matching the lesson (at {_0}) was found.")]
@@ -173,7 +173,7 @@ impl Serialize for ParseError {
             ParseError::UnknownWorkSheetRange => {
                 serializer.serialize_str("UNKNOWN_WORK_SHEET_RANGE")
             }
-            ParseError::GlobalTime(_) => serializer.serialize_str("GLOBAL_TIME"),
+            ParseError::LessonBoundaries(_) => serializer.serialize_str("GLOBAL_TIME"),
             ParseError::LessonTimeNotFound(_) => serializer.serialize_str("LESSON_TIME_NOT_FOUND"),
         }
     }

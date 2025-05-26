@@ -1,7 +1,7 @@
 use self::schema::*;
 use crate::AppState;
 use crate::app_state::Schedule;
-use crate::parser::parse_xls;
+use schedule_parser::parse_xls;
 use crate::routes::schedule::schema::CacheStatus;
 use crate::routes::schema::{IntoResponseAsError, ResponseError};
 use crate::xls_downloader::interface::{FetchError, XLSDownloader};
@@ -79,7 +79,7 @@ pub async fn update_download_url(
 }
 
 mod schema {
-    use crate::parser::schema::ParseError;
+    use schedule_parser::schema::ParseError;
     use crate::routes::schedule::schema::CacheStatus;
     use actix_macros::{IntoResponseErrorNamed, StatusCode};
     use derive_more::Display;

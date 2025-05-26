@@ -13,7 +13,6 @@ mod app_state;
 
 mod database;
 
-mod parser;
 mod xls_downloader;
 
 mod extractors;

@@ -1,7 +1,7 @@
-use crate::parser::LessonParseResult::{Lessons, Street};
-use crate::parser::schema::LessonType::Break;
-use crate::parser::schema::{
-    Day, ErrorCell, ErrorCellPos, Lesson, LessonSubGroup, LessonTime, LessonType, ParseError,
+use crate::LessonParseResult::{Lessons, Street};
+use crate::schema::LessonType::Break;
+use crate::schema::{
+    Day, ErrorCell, ErrorCellPos, Lesson, LessonBoundaries, LessonSubGroup, LessonType, ParseError,
     ParseResult, ScheduleEntry,
 };
 use calamine::{Reader, Xls, open_workbook_from_rs};
@@ -11,15 +11,14 @@ use fuzzy_matcher::skim::SkimMatcherV2;
 use regex::Regex;
 use std::collections::HashMap;
 use std::io::Cursor;
+use std::ops::Deref;
 use std::sync::LazyLock;
 
+mod macros;
 pub mod schema;
 
-/// Data cell storing the line.
-struct InternalId {
-    /// Line index.
-    row: u32,
-
+/// Data cell storing the group name.
+struct GroupCellInfo {
     /// Column index.
     column: u32,
 
@@ -27,10 +26,25 @@ struct InternalId {
     name: String,
 }
 
+/// Data cell storing the line.
+struct DayCellInfo {
+    /// Line index.
+    row: u32,
+
+    /// Column index.
+    column: u32,
+
+    /// Day name.
+    name: String,
+
+    /// Date of the day.
+    date: DateTime<Utc>,
+}
+
 /// Data on the time of lessons from the second column of the schedule.
-struct InternalTime {
+struct BoundariesCellInfo {
     /// Temporary segment of the lesson.
-    time_range: LessonTime,
+    time_range: LessonBoundaries,
 
     /// Type of lesson.
     lesson_type: LessonType,
@@ -108,58 +122,58 @@ fn get_merge_from_start(worksheet: &WorkSheet, row: u32, column: u32) -> ((u32, 
 }
 
 /// Obtaining a "skeleton" schedule from the working sheet.
-fn parse_skeleton(worksheet: &WorkSheet) -> Result<(Vec<InternalId>, Vec<InternalId>), ParseError> {
-    let range = &worksheet;
+fn parse_skeleton(
+    worksheet: &WorkSheet,
+) -> Result<(Vec<DayCellInfo>, Vec<GroupCellInfo>), ParseError> {
+    let mut groups: Vec<GroupCellInfo> = Vec::new();
+    let mut days: Vec<DayCellInfo> = Vec::new();
 
-    let mut is_parsed = false;
+    let worksheet_start = worksheet.start().ok_or(ParseError::UnknownWorkSheetRange)?;
+    let worksheet_end = worksheet.end().ok_or(ParseError::UnknownWorkSheetRange)?;
 
-    let mut groups: Vec<InternalId> = Vec::new();
-    let mut days: Vec<InternalId> = Vec::new();
+    let mut row = worksheet_start.0;
 
-    let start = range.start().ok_or(ParseError::UnknownWorkSheetRange)?;
-    let end = range.end().ok_or(ParseError::UnknownWorkSheetRange)?;
-
-    let mut row = start.0;
-    while row < end.0 {
+    while row < worksheet_end.0 {
         row += 1;
 
-        let day_name_opt = get_string_from_cell(&worksheet, row, 0);
-        if day_name_opt.is_none() {
-            continue;
-        }
+        let day_full_name = or_continue!(get_string_from_cell(&worksheet, row, 0));
 
-        let day_name = day_name_opt.unwrap();
-
-        if !is_parsed {
-            is_parsed = true;
-
+        // parse groups row when days column will found
+        if groups.is_empty() {
+            // переход на предыдущую строку
             row -= 1;
 
-            for column in (start.1 + 2)..=end.1 {
-                let group_name = get_string_from_cell(&worksheet, row, column);
-                if group_name.is_none() {
-                    continue;
-                }
-
-                groups.push(InternalId {
-                    row,
+            for column in (worksheet_start.1 + 2)..=worksheet_end.1 {
+                groups.push(GroupCellInfo {
                     column,
-                    name: group_name.unwrap(),
+                    name: or_continue!(get_string_from_cell(&worksheet, row, column)),
                 });
             }
 
+            // возврат на текущую строку
             row += 1;
         }
 
-        days.push(InternalId {
+        let (day_name, day_date) = {
+            let space_index = day_full_name.find(' ').unwrap();
+
+            let name = day_full_name[..space_index].to_string();
+
+            let date_raw = day_full_name[space_index + 1..].to_string();
+            let date_add = format!("{} 00:00:00", date_raw);
+
+            let date =
+                or_break!(NaiveDateTime::parse_from_str(&*date_add, "%d.%m.%Y %H:%M:%S").ok());
+
+            (name, date.and_utc())
+        };
+
+        days.push(DayCellInfo {
             row,
             column: 0,
-            name: day_name.clone(),
+            name: day_name,
+            date: day_date,
         });
-
-        if days.len() > 2 && day_name.starts_with("Суббота") {
-            break;
-        }
     }
 
     Ok((days, groups))
@@ -238,106 +252,104 @@ fn guess_lesson_type(name: &String) -> Option<(String, LessonType)> {
 fn parse_lesson(
     worksheet: &WorkSheet,
     day: &mut Day,
-    day_times: &Vec<InternalTime>,
-    time: &InternalTime,
+    day_boundaries: &Vec<BoundariesCellInfo>,
+    lesson_boundaries: &BoundariesCellInfo,
     column: u32,
 ) -> Result<LessonParseResult, ParseError> {
-    let row = time.xls_range.0.0;
+    let row = lesson_boundaries.xls_range.0.0;
 
     let (name, lesson_type) = {
-        let raw_name_opt = get_string_from_cell(&worksheet, row, column);
-        if raw_name_opt.is_none() {
-            return Ok(Lessons(Vec::new()));
-        }
-
-        let raw_name = raw_name_opt.unwrap();
+        let full_name = match get_string_from_cell(&worksheet, row, column) {
+            Some(x) => x,
+            None => return Ok(Lessons(Vec::new())),
+        };
 
         static OTHER_STREET_RE: LazyLock<Regex> =
             LazyLock::new(|| Regex::new(r"^[А-Я][а-я]+,?\s?[0-9]+$").unwrap());
 
-        if OTHER_STREET_RE.is_match(&raw_name) {
-            return Ok(Street(raw_name));
+        if OTHER_STREET_RE.is_match(&full_name) {
+            return Ok(Street(full_name));
         }
 
-        if let Some(guess) = guess_lesson_type(&raw_name) {
-            guess
-        } else {
-            (raw_name, time.lesson_type.clone())
+        match guess_lesson_type(&full_name) {
+            Some(x) => x,
+            None => (full_name, lesson_boundaries.lesson_type.clone()),
         }
     };
 
-    let (default_range, lesson_time) = || -> Result<(Option<[u8; 2]>, LessonTime), ParseError> {
-        // check if multi-lesson
+    let (default_range, lesson_time) = {
         let cell_range = get_merge_from_start(worksheet, row, column);
-
-        let end_time_arr = day_times
+        
+        let end_time_arr = day_boundaries
             .iter()
             .filter(|time| time.xls_range.1.0 == cell_range.1.0)
-            .collect::<Vec<&InternalTime>>();
+            .collect::<Vec<&BoundariesCellInfo>>();
 
         let end_time = end_time_arr
             .first()
             .ok_or(ParseError::LessonTimeNotFound(ErrorCellPos { row, column }))?;
 
-        let range: Option<[u8; 2]> = if time.default_index != None {
-            let default = time.default_index.unwrap() as u8;
+        let range: Option<[u8; 2]> = if lesson_boundaries.default_index != None {
+            let default = lesson_boundaries.default_index.unwrap() as u8;
             Some([default, end_time.default_index.unwrap() as u8])
         } else {
             None
         };
 
-        let time = LessonTime {
-            start: time.time_range.start,
+        let time = LessonBoundaries {
+            start: lesson_boundaries.time_range.start,
             end: end_time.time_range.end,
         };
 
         Ok((range, time))
-    }()?;
+    }?;
 
     let (name, mut subgroups) = parse_name_and_subgroups(&name)?;
 
     {
         let cabinets: Vec<String> = parse_cabinets(worksheet, row, column + 1);
 
-        // Если количество кабинетов равно 1, назначаем этот кабинет всем подгруппам
-        if cabinets.len() == 1 {
-            for subgroup in &mut subgroups {
-                subgroup.cabinet = Some(cabinets.get(0).or(Some(&String::new())).unwrap().clone())
+        match cabinets.len() {
+            // Если кабинетов нет, но есть подгруппы, назначаем им кабинет "??"
+            0 => {
+                for subgroup in &mut subgroups {
+                    subgroup.cabinet = Some("??".to_string());
+                }
             }
-        }
-        // Если количество кабинетов совпадает с количеством подгрупп, назначаем кабинеты по порядку
-        else if cabinets.len() == subgroups.len() {
-            for subgroup in &mut subgroups {
-                subgroup.cabinet = Some(
-                    cabinets
-                        .get((subgroup.number - 1) as usize)
-                        .unwrap()
-                        .clone(),
-                );
+            // Назначаем этот кабинет всем подгруппам
+            1 => {
+                for subgroup in &mut subgroups {
+                    subgroup.cabinet =
+                        Some(cabinets.get(0).or(Some(&String::new())).unwrap().clone())
+                }
             }
-        }
-        // Если количество кабинетов больше количества подгрупп, делаем ещё одну подгруппу.
-        else if cabinets.len() > subgroups.len() {
-            for index in 0..subgroups.len() {
-                subgroups[index].cabinet = Some(cabinets[index].clone());
-            }
+            len => {
+                // Если количество кабинетов совпадает с количеством подгрупп, назначаем кабинеты по порядку
+                if len == subgroups.len() {
+                    for subgroup in &mut subgroups {
+                        subgroup.cabinet = Some(
+                            cabinets
+                                .get((subgroup.number - 1) as usize)
+                                .unwrap()
+                                .clone(),
+                        );
+                    }
+                // Если количество кабинетов больше количества подгрупп, делаем ещё одну подгруппу.
+                } else if len > subgroups.len() {
+                    for index in 0..subgroups.len() {
+                        subgroups[index].cabinet = Some(cabinets[index].clone());
+                    }
 
-            while cabinets.len() > subgroups.len() {
-                subgroups.push(LessonSubGroup {
-                    number: (subgroups.len() + 1) as u8,
-                    cabinet: Some(cabinets[subgroups.len()].clone()),
-                    teacher: "Ошибка в расписании".to_string(),
-                });
+                    while cabinets.len() > subgroups.len() {
+                        subgroups.push(LessonSubGroup {
+                            number: (subgroups.len() + 1) as u8,
+                            cabinet: Some(cabinets[subgroups.len()].clone()),
+                            teacher: "Ошибка в расписании".to_string(),
+                        });
+                    }
+                }
             }
-        }
-        // Если кабинетов нет, но есть подгруппы, назначаем им значение "??"
-        else {
-            for subgroup in &mut subgroups {
-                subgroup.cabinet = Some("??".to_string());
-            }
-        }
-
-        cabinets
+        };
     };
 
     let lesson = Lesson {
@@ -349,7 +361,7 @@ fn parse_lesson(
         group: None,
     };
 
-    let prev_lesson = if day.lessons.len() == 0 {
+    let prev_lesson = if day.lessons.is_empty() {
         return Ok(Lessons(Vec::from([lesson])));
     } else {
         &day.lessons[day.lessons.len() - 1]
@@ -360,7 +372,7 @@ fn parse_lesson(
             lesson_type: Break,
             default_range: None,
             name: None,
-            time: LessonTime {
+            time: LessonBoundaries {
                 start: prev_lesson.time.end,
                 end: lesson.time.start,
             },
@@ -474,6 +486,122 @@ fn parse_name_and_subgroups(name: &String) -> Result<(String, Vec<LessonSubGroup
     Ok((lesson_name, subgroups))
 }
 
+fn parse_lesson_boundaries_cell(
+    cell_data: &String,
+    date: DateTime<Utc>,
+) -> Option<LessonBoundaries> {
+    static TIME_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(\d+\.\d+)-(\d+\.\d+)").unwrap());
+
+    let parse_res = if let Some(captures) = TIME_RE.captures(cell_data) {
+        captures
+    } else {
+        return None;
+    };
+
+    let start_match = parse_res.get(1).unwrap().as_str();
+    let start_parts: Vec<&str> = start_match.split(".").collect();
+
+    let end_match = parse_res.get(2).unwrap().as_str();
+    let end_parts: Vec<&str> = end_match.split(".").collect();
+
+    static GET_TIME: fn(DateTime<Utc>, &Vec<&str>) -> DateTime<Utc> = |date, parts| {
+        date + Duration::hours(parts[0].parse::<i64>().unwrap() - 4)
+            + Duration::minutes(parts[1].parse::<i64>().unwrap())
+    };
+
+    Some(LessonBoundaries {
+        start: GET_TIME(date.clone(), &start_parts),
+        end: GET_TIME(date, &end_parts),
+    })
+}
+
+fn parse_day_boundaries_column(
+    worksheet: &WorkSheet,
+    day_markup: &DayCellInfo,
+    lesson_time_column: u32,
+    row_distance: u32,
+) -> Result<Vec<BoundariesCellInfo>, ParseError> {
+    let mut day_times: Vec<BoundariesCellInfo> = Vec::new();
+
+    for row in day_markup.row..(day_markup.row + row_distance) {
+        let time_cell = if let Some(str) = get_string_from_cell(&worksheet, row, lesson_time_column)
+        {
+            str
+        } else {
+            continue;
+        };
+
+        let lesson_time = parse_lesson_boundaries_cell(&time_cell, day_markup.date.clone()).ok_or(
+            ParseError::LessonBoundaries(ErrorCell::new(
+                row,
+                lesson_time_column,
+                time_cell.clone(),
+            )),
+        )?;
+
+        // type
+        let lesson_type = if time_cell.contains("пара") {
+            LessonType::Default
+        } else {
+            LessonType::Additional
+        };
+
+        // lesson index
+        let default_index = if lesson_type == LessonType::Default {
+            Some(
+                time_cell
+                    .chars()
+                    .next()
+                    .unwrap()
+                    .to_string()
+                    .parse::<u32>()
+                    .unwrap(),
+            )
+        } else {
+            None
+        };
+
+        day_times.push(BoundariesCellInfo {
+            time_range: lesson_time,
+            lesson_type,
+            default_index,
+            xls_range: get_merge_from_start(&worksheet, row, lesson_time_column),
+        });
+    }
+
+    return Ok(day_times);
+}
+
+fn parse_week_boundaries_column(
+    worksheet: &WorkSheet,
+    week_markup: &Vec<DayCellInfo>,
+) -> Result<Vec<Vec<BoundariesCellInfo>>, ParseError> {
+    let mut result: Vec<Vec<BoundariesCellInfo>> = Vec::new();
+
+    let worksheet_end_row = worksheet.end().unwrap().0;
+    let lesson_time_column = week_markup[0].column + 1;
+
+    for day_index in 0..week_markup.len() {
+        let day_markup = &week_markup[day_index];
+
+        // Если текущий день не последнему, то индекс строки следующего дня минус индекс строки текущего дня.
+        // Если текущий день - последний, то индекс последней строки документа минус индекс строки текущего дня.
+        let row_distance = if day_index != week_markup.len() - 1 {
+            week_markup[day_index + 1].row
+        } else {
+            worksheet_end_row
+        } - day_markup.row;
+
+        let day_boundaries =
+            parse_day_boundaries_column(&worksheet, day_markup, lesson_time_column, row_distance)?;
+
+        result.push(day_boundaries);
+    }
+
+    Ok(result)
+}
+
 /// Conversion of the list of couples of groups in the list of lessons of teachers.
 fn convert_groups_to_teachers(
     groups: &HashMap<String, ScheduleEntry>,
@@ -562,11 +690,11 @@ fn convert_groups_to_teachers(
 /// # Examples
 ///
 /// ```
-/// use schedule_parser_rusted::parser::parse_xls;
+/// use schedule_parser::parse_xls;
 ///
 /// let result = parse_xls(&include_bytes!("../../schedule.xls").to_vec());
 ///
-/// assert!(result.is_ok());
+/// assert!(result.is_ok(), "{}", result.err().unwrap());
 ///
 /// assert_ne!(result.as_ref().unwrap().groups.len(), 0);
 /// assert_ne!(result.as_ref().unwrap().teachers.len(), 0);
@@ -583,12 +711,10 @@ pub fn parse_xls(buffer: &Vec<u8>) -> Result<ParseResult, ParseError> {
         .1
         .to_owned();
 
-    let (days_markup, groups_markup) = parse_skeleton(&worksheet)?;
+    let (week_markup, groups_markup) = parse_skeleton(&worksheet)?;
+    let week_boundaries = parse_week_boundaries_column(&worksheet, &week_markup)?;
 
     let mut groups: HashMap<String, ScheduleEntry> = HashMap::new();
-    let mut days_times: Vec<Vec<InternalTime>> = Vec::new();
-
-    let saturday_end_row = worksheet.end().unwrap().0;
 
     for group_markup in groups_markup {
         let mut group = ScheduleEntry {
@@ -596,118 +722,28 @@ pub fn parse_xls(buffer: &Vec<u8>) -> Result<ParseResult, ParseError> {
             days: Vec::new(),
         };
 
-        for day_index in 0..(&days_markup).len() {
-            let day_markup = &days_markup[day_index];
+        for day_index in 0..(&week_markup).len() {
+            let day_markup = &week_markup[day_index];
 
-            let mut day = {
-                let space_index = day_markup.name.find(' ').unwrap();
-
-                let name = day_markup.name[..space_index].to_string();
-
-                let date_raw = day_markup.name[space_index + 1..].to_string();
-                let date_add = format!("{} 00:00:00", date_raw);
-
-                let date = NaiveDateTime::parse_from_str(&*date_add, "%d.%m.%Y %H:%M:%S");
-
-                Day {
-                    name,
-                    street: None,
-                    date: date.unwrap().and_utc(),
-                    lessons: Vec::new(),
-                }
+            let mut day = Day {
+                name: day_markup.name.clone(),
+                street: None,
+                date: day_markup.date,
+                lessons: Vec::new(),
             };
 
-            let lesson_time_column = days_markup[0].column + 1;
+            let day_boundaries = &week_boundaries[day_index];
 
-            let row_distance = if day_index != days_markup.len() - 1 {
-                days_markup[day_index + 1].row
-            } else {
-                saturday_end_row
-            } - day_markup.row;
-
-            if days_times.len() != 6 {
-                let mut day_times: Vec<InternalTime> = Vec::new();
-
-                for row in day_markup.row..(day_markup.row + row_distance) {
-                    // time
-                    let time_opt = get_string_from_cell(&worksheet, row, lesson_time_column);
-                    if time_opt.is_none() {
-                        continue;
-                    }
-
-                    let time = time_opt.unwrap();
-
-                    // type
-                    let lesson_type = if time.contains("пара") {
-                        LessonType::Default
-                    } else {
-                        LessonType::Additional
-                    };
-
-                    // lesson index
-                    let default_index = if lesson_type == LessonType::Default {
-                        Some(
-                            time.chars()
-                                .next()
-                                .unwrap()
-                                .to_string()
-                                .parse::<u32>()
-                                .unwrap(),
-                        )
-                    } else {
-                        None
-                    };
-
-                    // time
-                    let time_range = {
-                        static TIME_RE: LazyLock<Regex> =
-                            LazyLock::new(|| Regex::new(r"(\d+\.\d+)-(\d+\.\d+)").unwrap());
-
-                        let parse_res = TIME_RE.captures(&time).ok_or(ParseError::GlobalTime(
-                            ErrorCell::new(row, lesson_time_column, time.clone()),
-                        ))?;
-
-                        let start_match = parse_res.get(1).unwrap().as_str();
-                        let start_parts: Vec<&str> = start_match.split(".").collect();
-
-                        let end_match = parse_res.get(2).unwrap().as_str();
-                        let end_parts: Vec<&str> = end_match.split(".").collect();
-
-                        static GET_TIME: fn(DateTime<Utc>, &Vec<&str>) -> DateTime<Utc> =
-                            |date, parts| {
-                                date + Duration::hours(parts[0].parse::<i64>().unwrap() - 4)
-                                    + Duration::minutes(parts[1].parse::<i64>().unwrap())
-                            };
-
-                        LessonTime {
-                            start: GET_TIME(day.date.clone(), &start_parts),
-                            end: GET_TIME(day.date.clone(), &end_parts),
-                        }
-                    };
-
-                    day_times.push(InternalTime {
-                        time_range,
-                        lesson_type,
-                        default_index,
-                        xls_range: get_merge_from_start(&worksheet, row, lesson_time_column),
-                    });
-                }
-
-                days_times.push(day_times);
-            }
-
-            let day_times = &days_times[day_index];
-
-            for time in day_times {
+            for lesson_boundaries in day_boundaries {
                 match &mut parse_lesson(
                     &worksheet,
                     &mut day,
-                    &day_times,
-                    &time,
+                    &day_boundaries,
+                    &lesson_boundaries,
                     group_markup.column,
                 )? {
-                    Lessons(l) => day.lessons.append(l),
-                    Street(s) => day.street = Some(s.to_owned()),
+                    Lessons(lesson) => day.lessons.append(lesson),
+                    Street(street) => day.street = Some(street.to_owned()),
                 }
             }
 
@@ -723,21 +759,39 @@ pub fn parse_xls(buffer: &Vec<u8>) -> Result<ParseResult, ParseError> {
     })
 }
 
-#[cfg(test)]
-pub mod tests {
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_utils {
     use super::*;
 
     pub fn test_result() -> Result<ParseResult, ParseError> {
         parse_xls(&include_bytes!("../../schedule.xls").to_vec())
     }
+}
 
+#[cfg(test)]
+pub mod tests {
     #[test]
     fn read() {
-        let result = test_result();
+        let result = super::test_utils::test_result();
 
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "{}", result.err().unwrap());
 
         assert_ne!(result.as_ref().unwrap().groups.len(), 0);
         assert_ne!(result.as_ref().unwrap().teachers.len(), 0);
+    }
+
+    #[test]
+    fn test_split_lesson() {
+        let result = super::test_utils::test_result();
+        assert!(result.is_ok(), "{}", result.err().unwrap());
+
+        let result = result.unwrap();
+        assert!(result.groups.contains_key("ИС-214/23"));
+
+        let group = result.groups.get("ИС-214/23").unwrap();
+        let thursday = group.days.get(3).unwrap();
+
+        assert_eq!(thursday.lessons.len(), 1);
+        assert_eq!(thursday.lessons[0].default_range.unwrap()[1], 3);
     }
 }

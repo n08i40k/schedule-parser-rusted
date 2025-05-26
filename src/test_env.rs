@@ -1,7 +1,7 @@
 #[cfg(test)]
 pub(crate) mod tests {
     use crate::app_state::{AppState, Schedule, app_state};
-    use crate::parser::tests::test_result;
+    use schedule_parser::test_utils::test_result;
     use crate::utility::mutex::MutexScope;
     use actix_web::web;
     use std::default::Default;

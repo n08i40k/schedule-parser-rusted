@@ -1,5 +1,5 @@
 use crate::app_state::{AppState, Schedule};
-use crate::parser::schema::ScheduleEntry;
+use schedule_parser::schema::ScheduleEntry;
 use actix_macros::{IntoResponseErrorNamed, ResponderJson, StatusCode};
 use actix_web::web;
 use chrono::{DateTime, Duration, Utc};
