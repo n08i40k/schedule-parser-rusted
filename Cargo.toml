@@ -3,7 +3,7 @@ members = ["actix-macros", "actix-test", "schedule-parser"]
 
 [package]
 name = "schedule-parser-rusted"
-version = "1.0.3"
+version = "1.0.5"
 edition = "2024"
 publish = false
 

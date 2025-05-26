@@ -2890,7 +2890,7 @@ dependencies = [
 
 [[package]]
 name = "schedule-parser-rusted"
-version = "1.0.3"
+version = "1.0.5"
 dependencies = [
  "actix-macros 0.1.0",
  "actix-test",
