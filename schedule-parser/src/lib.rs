@@ -96,6 +96,8 @@ fn guess_lesson_type(text: &String) -> Option<LessonType> {
             ("зачет", LessonType::Exam),
             ("зачет с оценкой", LessonType::ExamWithGrade),
             ("экзамен", LessonType::ExamDefault),
+            ("курсовой проект", LessonType::CourseProject),
+            ("защита курсового проекта", LessonType::CourseProjectDefense),
         ])
     });
 
@@ -174,10 +176,7 @@ fn parse_lesson(
     {
         let cabinets: Vec<String> = parse_cabinets(
             worksheet,
-            (
-                cell_range.0.0,
-                cell_range.1.0,
-            ),
+            (cell_range.0.0, cell_range.1.0),
             group_column + 1,
         );
 

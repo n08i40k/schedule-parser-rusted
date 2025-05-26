@@ -88,6 +88,12 @@ pub enum LessonType {
 
     /// Экзамен.
     ExamDefault,
+    
+    /// Курсовой проект.
+    CourseProject,
+    
+    /// Защита курсового проекта.
+    CourseProjectDefense,
 }
 
 #[derive(Clone, Hash, Debug, Serialize, Deserialize, ToSchema)]
