@@ -20,7 +20,7 @@ derive_more = { version = "2", features = ["full"] }
 diesel = { version = "2.2.8", features = ["postgres"] }
 diesel-derive-enum = { git = "https://github.com/Havunen/diesel-derive-enum.git", features = ["postgres"] }
 dotenvy = "0.15.7"
-env_logger = "0.11.7"
+env_logger = "0.11.8"
 firebase-messaging-rs = { git = "https://github.com/i10416/firebase-messaging-rs.git" }
 futures-util = "0.3.31"
 jsonwebtoken = { version = "9.3.1", features = ["use_pem"] }
