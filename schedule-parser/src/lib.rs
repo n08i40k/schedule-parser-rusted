@@ -56,8 +56,18 @@ struct BoundariesCellInfo {
     xls_range: ((u32, u32), (u32, u32)),
 }
 
-/// Working sheet type alias.
-type WorkSheet = calamine::Range<calamine::Data>;
+struct WorkSheet {
+    pub data: calamine::Range<calamine::Data>,
+    pub merges: Vec<calamine::Dimensions>,
+}
+
+impl Deref for WorkSheet {
+    type Target = calamine::Range<calamine::Data>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
 
 /// Getting a line from the required cell.
 fn get_string_from_cell(worksheet: &WorkSheet, row: u32, col: u32) -> Option<String> {
@@ -88,37 +98,14 @@ fn get_string_from_cell(worksheet: &WorkSheet, row: u32, col: u32) -> Option<Str
 
 /// Obtaining the boundaries of the cell along its upper left coordinate.
 fn get_merge_from_start(worksheet: &WorkSheet, row: u32, column: u32) -> ((u32, u32), (u32, u32)) {
-    let worksheet_end = worksheet.end().unwrap();
-
-    let row_end: u32 = {
-        let mut r: u32 = 0;
-
-        for _r in (row + 1)..worksheet_end.0 {
-            r = _r;
-
-            if let Some(_) = worksheet.get((_r as usize, column as usize)) {
-                break;
-            }
-        }
-
-        r
+    return match worksheet
+        .merges
+        .iter()
+        .find(|merge| merge.start.0 == row && merge.start.1 == column)
+    {
+        Some(merge) => (merge.start, (merge.end.0 + 1, merge.end.1 + 1)),
+        None => ((row, column), (row + 1, column + 1))
     };
-
-    let column_end: u32 = {
-        let mut c: u32 = 0;
-
-        for _c in (column + 1)..worksheet_end.1 {
-            c = _c;
-
-            if let Some(_) = worksheet.get((row as usize, _c as usize)) {
-                break;
-            }
-        }
-
-        c
-    };
-
-    ((row, column), (row_end, column_end))
 }
 
 /// Obtaining a "skeleton" schedule from the working sheet.
@@ -704,12 +691,22 @@ pub fn parse_xls(buffer: &Vec<u8>) -> Result<ParseResult, ParseError> {
     let mut workbook: Xls<_> =
         open_workbook_from_rs(cursor).map_err(|e| ParseError::BadXLS(std::sync::Arc::new(e)))?;
 
-    let worksheet: WorkSheet = workbook
-        .worksheets()
-        .first()
-        .ok_or(ParseError::NoWorkSheets)?
-        .1
-        .to_owned();
+    let worksheet = {
+        let (worksheet_name, worksheet) = workbook
+            .worksheets()
+            .first()
+            .ok_or(ParseError::NoWorkSheets)?
+            .clone();
+
+        let worksheet_merges = workbook
+            .worksheet_merge_cells(&*worksheet_name)
+            .ok_or(ParseError::NoWorkSheets)?;
+
+        WorkSheet {
+            data: worksheet,
+            merges: worksheet_merges,
+        }
+    };
 
     let (week_markup, groups_markup) = parse_skeleton(&worksheet)?;
     let week_boundaries = parse_week_boundaries_column(&worksheet, &week_markup)?;
