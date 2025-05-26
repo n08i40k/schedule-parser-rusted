@@ -6,6 +6,50 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use utoipa::ToSchema;
 
+pub(crate) mod internal {
+    use crate::schema::{LessonBoundaries, LessonType};
+    use chrono::{DateTime, Utc};
+
+    /// Data cell storing the group name.
+    pub struct GroupCellInfo {
+        /// Column index.
+        pub column: u32,
+
+        /// Text in the cell.
+        pub name: String,
+    }
+
+    /// Data cell storing the line.
+    pub struct DayCellInfo {
+        /// Line index.
+        pub row: u32,
+
+        /// Column index.
+        pub column: u32,
+
+        /// Day name.
+        pub name: String,
+
+        /// Date of the day.
+        pub date: DateTime<Utc>,
+    }
+
+    /// Data on the time of lessons from the second column of the schedule.
+    pub struct BoundariesCellInfo {
+        /// Temporary segment of the lesson.
+        pub time_range: LessonBoundaries,
+
+        /// Type of lesson.
+        pub lesson_type: LessonType,
+
+        /// The lesson index.
+        pub default_index: Option<u32>,
+
+        /// The frame of the cell.
+        pub xls_range: ((u32, u32), (u32, u32)),
+    }
+}
+
 /// The beginning and end of the lesson.
 #[derive(Clone, Hash, Debug, Serialize, Deserialize, ToSchema)]
 pub struct LessonBoundaries {

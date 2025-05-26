@@ -1,112 +1,23 @@
-use crate::LessonParseResult::{Lessons, Street};
+use crate::schema::internal::{BoundariesCellInfo, DayCellInfo, GroupCellInfo};
 use crate::schema::LessonType::Break;
 use crate::schema::{
     Day, ErrorCell, ErrorCellPos, Lesson, LessonBoundaries, LessonSubGroup, LessonType, ParseError,
     ParseResult, ScheduleEntry,
 };
-use calamine::{Reader, Xls, open_workbook_from_rs};
-use chrono::{DateTime, Duration, NaiveDateTime, Utc};
-use fuzzy_matcher::FuzzyMatcher;
+use crate::worksheet::WorkSheet;
+use crate::LessonParseResult::{Lessons, Street};
+use calamine::{open_workbook_from_rs, Reader, Xls};
+use chrono::{DateTime, Duration, NaiveDate, NaiveTime, Utc};
 use fuzzy_matcher::skim::SkimMatcherV2;
+use fuzzy_matcher::FuzzyMatcher;
 use regex::Regex;
 use std::collections::HashMap;
 use std::io::Cursor;
-use std::ops::Deref;
 use std::sync::LazyLock;
 
 mod macros;
 pub mod schema;
-
-/// Data cell storing the group name.
-struct GroupCellInfo {
-    /// Column index.
-    column: u32,
-
-    /// Text in the cell.
-    name: String,
-}
-
-/// Data cell storing the line.
-struct DayCellInfo {
-    /// Line index.
-    row: u32,
-
-    /// Column index.
-    column: u32,
-
-    /// Day name.
-    name: String,
-
-    /// Date of the day.
-    date: DateTime<Utc>,
-}
-
-/// Data on the time of lessons from the second column of the schedule.
-struct BoundariesCellInfo {
-    /// Temporary segment of the lesson.
-    time_range: LessonBoundaries,
-
-    /// Type of lesson.
-    lesson_type: LessonType,
-
-    /// The lesson index.
-    default_index: Option<u32>,
-
-    /// The frame of the cell.
-    xls_range: ((u32, u32), (u32, u32)),
-}
-
-struct WorkSheet {
-    pub data: calamine::Range<calamine::Data>,
-    pub merges: Vec<calamine::Dimensions>,
-}
-
-impl Deref for WorkSheet {
-    type Target = calamine::Range<calamine::Data>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.data
-    }
-}
-
-/// Getting a line from the required cell.
-fn get_string_from_cell(worksheet: &WorkSheet, row: u32, col: u32) -> Option<String> {
-    let cell_data = if let Some(data) = worksheet.get((row as usize, col as usize)) {
-        data.to_string()
-    } else {
-        return None;
-    };
-
-    if cell_data.trim().is_empty() {
-        return None;
-    }
-
-    static NL_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[\n\r]+").unwrap());
-    static SP_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\s+").unwrap());
-
-    let trimmed_data = SP_RE
-        .replace_all(&NL_RE.replace_all(&cell_data, " "), " ")
-        .trim()
-        .to_string();
-
-    if trimmed_data.is_empty() {
-        None
-    } else {
-        Some(trimmed_data)
-    }
-}
-
-/// Obtaining the boundaries of the cell along its upper left coordinate.
-fn get_merge_from_start(worksheet: &WorkSheet, row: u32, column: u32) -> ((u32, u32), (u32, u32)) {
-    return match worksheet
-        .merges
-        .iter()
-        .find(|merge| merge.start.0 == row && merge.start.1 == column)
-    {
-        Some(merge) => (merge.start, (merge.end.0 + 1, merge.end.1 + 1)),
-        None => ((row, column), (row + 1, column + 1))
-    };
-}
+mod worksheet;
 
 /// Obtaining a "skeleton" schedule from the working sheet.
 fn parse_skeleton(
@@ -123,7 +34,7 @@ fn parse_skeleton(
     while row < worksheet_end.0 {
         row += 1;
 
-        let day_full_name = or_continue!(get_string_from_cell(&worksheet, row, 0));
+        let day_full_name = or_continue!(worksheet.get_string_from_cell(row, 0));
 
         // parse groups row when days column will found
         if groups.is_empty() {
@@ -133,7 +44,7 @@ fn parse_skeleton(
             for column in (worksheet_start.1 + 2)..=worksheet_end.1 {
                 groups.push(GroupCellInfo {
                     column,
-                    name: or_continue!(get_string_from_cell(&worksheet, row, column)),
+                    name: or_continue!(worksheet.get_string_from_cell(row, column)),
                 });
             }
 
@@ -146,13 +57,12 @@ fn parse_skeleton(
 
             let name = day_full_name[..space_index].to_string();
 
-            let date_raw = day_full_name[space_index + 1..].to_string();
-            let date_add = format!("{} 00:00:00", date_raw);
+            let date_slice = &day_full_name[space_index + 1..];
+            let date = or_break!(NaiveDate::parse_from_str(date_slice, "%d.%m.%Y").ok())
+                .and_time(NaiveTime::default())
+                .and_utc();
 
-            let date =
-                or_break!(NaiveDateTime::parse_from_str(&*date_add, "%d.%m.%Y %H:%M:%S").ok());
-
-            (name, date.and_utc())
+            (name, date)
         };
 
         days.push(DayCellInfo {
@@ -238,15 +148,15 @@ fn guess_lesson_type(name: &String) -> Option<(String, LessonType)> {
 /// Getting a pair or street from a cell.
 fn parse_lesson(
     worksheet: &WorkSheet,
-    day: &mut Day,
+    day: &Day,
     day_boundaries: &Vec<BoundariesCellInfo>,
     lesson_boundaries: &BoundariesCellInfo,
-    column: u32,
+    group_column: u32,
 ) -> Result<LessonParseResult, ParseError> {
     let row = lesson_boundaries.xls_range.0.0;
 
     let (name, lesson_type) = {
-        let full_name = match get_string_from_cell(&worksheet, row, column) {
+        let full_name = match worksheet.get_string_from_cell(row, group_column) {
             Some(x) => x,
             None => return Ok(Lessons(Vec::new())),
         };
@@ -265,16 +175,20 @@ fn parse_lesson(
     };
 
     let (default_range, lesson_time) = {
-        let cell_range = get_merge_from_start(worksheet, row, column);
-        
+        let cell_range = worksheet.get_merge_from_start(row, group_column);
+
         let end_time_arr = day_boundaries
             .iter()
             .filter(|time| time.xls_range.1.0 == cell_range.1.0)
             .collect::<Vec<&BoundariesCellInfo>>();
 
-        let end_time = end_time_arr
-            .first()
-            .ok_or(ParseError::LessonTimeNotFound(ErrorCellPos { row, column }))?;
+        let end_time =
+            end_time_arr
+                .first()
+                .ok_or(ParseError::LessonTimeNotFound(ErrorCellPos {
+                    row,
+                    column: group_column,
+                }))?;
 
         let range: Option<[u8; 2]> = if lesson_boundaries.default_index != None {
             let default = lesson_boundaries.default_index.unwrap() as u8;
@@ -294,7 +208,7 @@ fn parse_lesson(
     let (name, mut subgroups) = parse_name_and_subgroups(&name)?;
 
     {
-        let cabinets: Vec<String> = parse_cabinets(worksheet, row, column + 1);
+        let cabinets: Vec<String> = parse_cabinets(worksheet, row, group_column + 1);
 
         match cabinets.len() {
             // Если кабинетов нет, но есть подгруппы, назначаем им кабинет "??"
@@ -374,7 +288,7 @@ fn parse_lesson(
 fn parse_cabinets(worksheet: &WorkSheet, row: u32, column: u32) -> Vec<String> {
     let mut cabinets: Vec<String> = Vec::new();
 
-    if let Some(raw) = get_string_from_cell(&worksheet, row, column) {
+    if let Some(raw) = worksheet.get_string_from_cell(row, column) {
         let clean = raw.replace("\n", " ");
         let parts: Vec<&str> = clean.split(" ").collect();
 
@@ -473,6 +387,12 @@ fn parse_name_and_subgroups(name: &String) -> Result<(String, Vec<LessonSubGroup
     Ok((lesson_name, subgroups))
 }
 
+/// Getting the start and end of a pair from a cell in the first column of a document.
+///
+/// # Arguments
+///
+/// * `cell_data`: text in cell.
+/// * `date`: date of the current day.
 fn parse_lesson_boundaries_cell(
     cell_data: &String,
     date: DateTime<Utc>,
@@ -503,28 +423,31 @@ fn parse_lesson_boundaries_cell(
     })
 }
 
-fn parse_day_boundaries_column(
+/// Parse the column of the document to obtain a list of day's lesson boundaries.
+///
+/// # Arguments
+///
+/// * `worksheet`: document.
+/// * `date`: date of the current day.
+/// * `row_range`: row boundaries of the current day.
+/// * `column`: column with the required data.
+fn parse_day_boundaries(
     worksheet: &WorkSheet,
-    day_markup: &DayCellInfo,
-    lesson_time_column: u32,
-    row_distance: u32,
+    date: DateTime<Utc>,
+    row_range: (u32, u32),
+    column: u32,
 ) -> Result<Vec<BoundariesCellInfo>, ParseError> {
     let mut day_times: Vec<BoundariesCellInfo> = Vec::new();
 
-    for row in day_markup.row..(day_markup.row + row_distance) {
-        let time_cell = if let Some(str) = get_string_from_cell(&worksheet, row, lesson_time_column)
-        {
+    for row in row_range.0..row_range.1 {
+        let time_cell = if let Some(str) = worksheet.get_string_from_cell(row, column) {
             str
         } else {
             continue;
         };
 
-        let lesson_time = parse_lesson_boundaries_cell(&time_cell, day_markup.date.clone()).ok_or(
-            ParseError::LessonBoundaries(ErrorCell::new(
-                row,
-                lesson_time_column,
-                time_cell.clone(),
-            )),
+        let lesson_time = parse_lesson_boundaries_cell(&time_cell, date.clone()).ok_or(
+            ParseError::LessonBoundaries(ErrorCell::new(row, column, time_cell.clone())),
         )?;
 
         // type
@@ -553,14 +476,20 @@ fn parse_day_boundaries_column(
             time_range: lesson_time,
             lesson_type,
             default_index,
-            xls_range: get_merge_from_start(&worksheet, row, lesson_time_column),
+            xls_range: worksheet.get_merge_from_start(row, column),
         });
     }
 
-    return Ok(day_times);
+    Ok(day_times)
 }
 
-fn parse_week_boundaries_column(
+/// Parse the column of the document to obtain a list of week's lesson boundaries.
+///
+/// # Arguments
+///
+/// * `worksheet`: document.
+/// * `week_markup`: markup of the current week.
+fn parse_week_boundaries(
     worksheet: &WorkSheet,
     week_markup: &Vec<DayCellInfo>,
 ) -> Result<Vec<Vec<BoundariesCellInfo>>, ParseError> {
@@ -572,16 +501,20 @@ fn parse_week_boundaries_column(
     for day_index in 0..week_markup.len() {
         let day_markup = &week_markup[day_index];
 
-        // Если текущий день не последнему, то индекс строки следующего дня минус индекс строки текущего дня.
-        // Если текущий день - последний, то индекс последней строки документа минус индекс строки текущего дня.
-        let row_distance = if day_index != week_markup.len() - 1 {
+        // Если текущий день не последнему, то индекс строки следующего дня.
+        // Если текущий день - последний, то индекс последней строки документа.
+        let end_row = if day_index != week_markup.len() - 1 {
             week_markup[day_index + 1].row
         } else {
             worksheet_end_row
-        } - day_markup.row;
+        };
 
-        let day_boundaries =
-            parse_day_boundaries_column(&worksheet, day_markup, lesson_time_column, row_distance)?;
+        let day_boundaries = parse_day_boundaries(
+            &worksheet,
+            day_markup.date.clone(),
+            (day_markup.row, end_row),
+            lesson_time_column,
+        )?;
 
         result.push(day_boundaries);
     }
@@ -709,7 +642,7 @@ pub fn parse_xls(buffer: &Vec<u8>) -> Result<ParseResult, ParseError> {
     };
 
     let (week_markup, groups_markup) = parse_skeleton(&worksheet)?;
-    let week_boundaries = parse_week_boundaries_column(&worksheet, &week_markup)?;
+    let week_boundaries = parse_week_boundaries(&worksheet, &week_markup)?;
 
     let mut groups: HashMap<String, ScheduleEntry> = HashMap::new();
 
@@ -734,7 +667,7 @@ pub fn parse_xls(buffer: &Vec<u8>) -> Result<ParseResult, ParseError> {
             for lesson_boundaries in day_boundaries {
                 match &mut parse_lesson(
                     &worksheet,
-                    &mut day,
+                    &day,
                     &day_boundaries,
                     &lesson_boundaries,
                     group_markup.column,
