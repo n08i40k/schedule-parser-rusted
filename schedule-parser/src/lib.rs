@@ -22,7 +22,7 @@ fn parse_skeleton(
     worksheet: &WorkSheet,
 ) -> Result<(Vec<DayCellInfo>, Vec<GroupCellInfo>), ParseError> {
     let mut groups: Vec<GroupCellInfo> = Vec::new();
-    let mut days: Vec<DayCellInfo> = Vec::new();
+    let mut days: Vec<(u32, String, Option<DateTime<Utc>>)> = Vec::new();
 
     let worksheet_start = worksheet.start().ok_or(ParseError::UnknownWorkSheetRange)?;
     let worksheet_end = worksheet.end().ok_or(ParseError::UnknownWorkSheetRange)?;
@@ -51,25 +51,56 @@ fn parse_skeleton(
         }
 
         let (day_name, day_date) = {
-            let space_index = day_full_name.find(' ').unwrap();
+            let space_index = match day_full_name.find(' ') {
+                Some(index) => {
+                    if index < 10 {
+                        break;
+                    } else {
+                        index
+                    }
+                }
+                None => break,
+            };
 
             let name = day_full_name[..space_index].to_string();
 
             let date_slice = &day_full_name[space_index + 1..];
-            let date = or_break!(NaiveDate::parse_from_str(date_slice, "%d.%m.%Y").ok())
-                .and_time(NaiveTime::default())
-                .and_utc();
+            let date = NaiveDate::parse_from_str(date_slice, "%d.%m.%Y")
+                .map(|date| date.and_time(NaiveTime::default()).and_utc())
+                .ok();
 
             (name, date)
         };
 
-        days.push(DayCellInfo {
-            row,
-            column: 0,
-            name: day_name,
-            date: day_date,
-        });
+        days.push((row, day_name, day_date));
     }
+
+    // fix unparsable day dates
+    let days_max = days.len().min(5);
+
+    for i in 0..days_max {
+        if days[i].2.is_none() && days[i + 1].2.is_some() {
+            days[i].2 = Some(days[i + 1].2.unwrap() - Duration::days(1));
+        }
+    }
+
+    for i in 0..days_max {
+        let i = days_max - i;
+
+        if days[i - 1].2.is_none() && days[i].2.is_some() {
+            days[i - 1].2 = Some(days[i].2.unwrap() - Duration::days(1));
+        }
+    }
+
+    let days = days
+        .into_iter()
+        .map(|day| DayCellInfo {
+            row: day.0,
+            column: 0,
+            name: day.1,
+            date: day.2.unwrap(),
+        })
+        .collect();
 
     Ok((days, groups))
 }
