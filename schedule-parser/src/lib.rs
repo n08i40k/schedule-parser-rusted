@@ -180,55 +180,54 @@ fn parse_lesson(
             group_column + 1,
         );
 
-        match cabinets.len() {
-            // Если кабинетов нет, но есть подгруппы, назначаем им кабинет "??"
-            0 => {
-                for subgroup in &mut subgroups {
-                    subgroup.cabinet = Some("??".to_string());
-                }
-            }
-            // Назначаем этот кабинет всем подгруппам
-            1 => {
-                for subgroup in &mut subgroups {
-                    subgroup.cabinet =
-                        Some(cabinets.get(0).or(Some(&String::new())).unwrap().clone())
-                }
-            }
-            len => {
-                // Если количество кабинетов совпадает с количеством подгрупп, назначаем кабинеты по порядку
-                if len == subgroups.len() {
-                    for subgroup in &mut subgroups {
-                        subgroup.cabinet = Some(
-                            cabinets
-                                .get((subgroup.number - 1) as usize)
-                                .unwrap()
-                                .clone(),
-                        );
-                    }
-                // Если количество кабинетов больше количества подгрупп, делаем ещё одну подгруппу.
-                } else if len > subgroups.len() {
-                    for index in 0..subgroups.len() {
-                        subgroups[index].cabinet = Some(cabinets[index].clone());
-                    }
+        let cab_count = cabinets.len();
 
-                    while cabinets.len() > subgroups.len() {
-                        subgroups.push(LessonSubGroup {
-                            number: (subgroups.len() + 1) as u8,
-                            cabinet: Some(cabinets[subgroups.len()].clone()),
-                            teacher: "Ошибка в расписании".to_string(),
+        if cab_count == 1 {
+            // Назначаем этот кабинет всем подгруппам
+            let cab = Some(cabinets.get(0).unwrap().clone());
+
+            for subgroup in &mut subgroups {
+                if let Some(subgroup) = subgroup {
+                    subgroup.cabinet = cab.clone()
+                }
+            }
+        } else if cab_count == 2 {
+            while subgroups.len() < cab_count {
+                subgroups.push(subgroups.last().unwrap_or(&None).clone());
+            }
+
+            for i in 0..cab_count {
+                let subgroup = subgroups.get_mut(i).unwrap();
+                let cabinet = Some(cabinets.get(i).unwrap().clone());
+
+                match subgroup {
+                    None => {
+                        let _ = subgroup.insert(LessonSubGroup {
+                            teacher: None,
+                            cabinet,
                         });
                     }
+                    Some(subgroup) => {
+                        subgroup.cabinet = cabinet;
+                    }
                 }
             }
-        };
+        }
     };
 
     let lesson = Lesson {
         lesson_type: lesson_type.unwrap_or(lesson_boundaries.lesson_type.clone()),
-        default_range,
+        range: default_range,
         name: Some(name),
         time: lesson_time,
-        subgroups: Some(subgroups),
+        subgroups: if subgroups.len() == 2
+            && subgroups.get(0).unwrap().is_none()
+            && subgroups.get(1).unwrap().is_none()
+        {
+            None
+        } else {
+            Some(subgroups)
+        },
         group: None,
     };
 
@@ -241,7 +240,7 @@ fn parse_lesson(
     Ok(Lessons(Vec::from([
         Lesson {
             lesson_type: Break,
-            default_range: None,
+            range: None,
             name: None,
             time: LessonBoundaries {
                 start: prev_lesson.time.end,
@@ -264,11 +263,11 @@ fn parse_cabinets(worksheet: &WorkSheet, row_range: (u32, u32), column: u32) -> 
         let clean = raw.replace("\n", " ");
         let parts: Vec<&str> = clean.split(" ").collect();
 
-        for part in parts {
+        parts.iter().take(2).for_each(|part| {
             let clean_part = part.to_string().trim().to_string();
 
             cabinets.push(clean_part);
-        }
+        });
 
         break;
     }
@@ -280,7 +279,7 @@ fn parse_cabinets(worksheet: &WorkSheet, row_range: (u32, u32), column: u32) -> 
 /// Getting the "pure" name of the lesson and list of teachers from the text of the lesson cell.
 fn parse_name_and_subgroups(
     text: &String,
-) -> Result<(String, Vec<LessonSubGroup>, Option<LessonType>), ParseError> {
+) -> Result<(String, Vec<Option<LessonSubGroup>>, Option<LessonType>), ParseError> {
     // Части названия пары:
     // 1. Само название.
     // 2. Список преподавателей и подгрупп.
@@ -308,9 +307,9 @@ fn parse_name_and_subgroups(
 
     static NAMES_REGEX: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
-            r"(?:[А-Я][а-я]+\s?(?:[А-Я][\s.]*){2}(?:\(\s*\d\s*[а-я\s]+\))?(?:[\s,]+)?)+[\s.]*",
+            r"(?:[А-Я][а-я]+\s?(?:[А-Я][\s.]*){2}(?:\(\s*\d\s*[а-я\s]+\))?(?:[\s,]+)?){1,2}+[\s.,]*",
         )
-        .unwrap()
+            .unwrap()
     });
 
     // Отчистка
@@ -320,40 +319,61 @@ fn parse_name_and_subgroups(
         .replace(&text.replace(&[' ', '\t', '\n'], " "), " ")
         .to_string();
 
-    let (lesson_name, mut subgroups, lesson_type) = match NAMES_REGEX.captures(&text) {
+    let (lesson_name, subgroups, lesson_type) = match NAMES_REGEX.captures(&text) {
         Some(captures) => {
             let capture = captures.get(0).unwrap();
 
-            let subgroups: Vec<LessonSubGroup> = {
+            let subgroups: Vec<Option<LessonSubGroup>> = {
                 let src = capture.as_str().replace(&[' ', '.'], "");
 
-                src.split(',')
-                    .map(|name| {
-                        let open_bracket_index = name.find('(');
+                let mut shared_subgroup = false;
+                let mut subgroups: [Option<LessonSubGroup>; 2] = [None, None];
 
-                        let subgroup_number = open_bracket_index.map_or(0, |index| {
-                            name[(index + 1)..(index + 2)].parse::<u8>().unwrap()
-                        });
+                for name in src.split(',') {
+                    let open_bracket_index = name.find('(');
 
-                        let teacher_name = {
-                            let name_end = open_bracket_index.unwrap_or_else(|| name.len());
+                    let number: u8 = open_bracket_index
+                        .map_or(0, |index| name[(index + 1)..(index + 2)].parse().unwrap());
 
-                            // Я ебал. Как же я долго до этого доходил.
-                            format!(
-                                "{} {}.{}.",
-                                name.get(..name_end - 4).unwrap(),
-                                name.get(name_end - 4..name_end - 2).unwrap(),
-                                name.get(name_end - 2..name_end).unwrap(),
-                            )
-                        };
+                    let teacher_name = {
+                        let name_end = open_bracket_index.unwrap_or_else(|| name.len());
 
-                        LessonSubGroup {
-                            number: subgroup_number,
-                            cabinet: None,
-                            teacher: teacher_name,
+                        // Я ебал. Как же я долго до этого доходил.
+                        format!(
+                            "{} {}.{}.",
+                            name.get(..name_end - 4).unwrap(),
+                            name.get(name_end - 4..name_end - 2).unwrap(),
+                            name.get(name_end - 2..name_end).unwrap(),
+                        )
+                    };
+
+                    let lesson = Some(LessonSubGroup {
+                        cabinet: None,
+                        teacher: Some(teacher_name),
+                    });
+
+                    match number {
+                        0 => {
+                            subgroups[0] = lesson;
+                            subgroups[1] = None;
+                            shared_subgroup = true;
+                            break;
                         }
-                    })
-                    .collect()
+                        num => {
+                            // 1 - 1 = 0 | 2 - 1 = 1 | 3 - 1 = 2 (schedule index to array index)
+                            // 0 % 2 = 0 | 1 % 2 = 1 | 2 % 2 = 0 (clamp)
+                            let normalised = (num - 1) % 2;
+
+                            subgroups[normalised as usize] = lesson;
+                        }
+                    }
+                }
+
+                if shared_subgroup {
+                    Vec::from([subgroups[0].take()])
+                } else {
+                    Vec::from(subgroups)
+                }
             };
 
             let name = text[..capture.start()].trim().to_string();
@@ -362,12 +382,15 @@ fn parse_name_and_subgroups(
             let lesson_type = if extra.len() > 4 {
                 let result = guess_lesson_type(&extra);
 
-                #[cfg(not(debug_assertions))]
                 if result.is_none() {
+                    #[cfg(not(debug_assertions))]
                     sentry::capture_message(
                         &*format!("Не удалось угадать тип пары '{}'!", extra),
                         sentry::Level::Warning,
                     );
+
+                    #[cfg(debug_assertions)]
+                    log::warn!("Не удалось угадать тип пары '{}'!", extra);
                 }
 
                 result
@@ -379,40 +402,6 @@ fn parse_name_and_subgroups(
         }
         None => (text, Vec::new(), None),
     };
-
-    // фикс, если у кого-то отсутствует индекс подгруппы
-
-    if subgroups.len() == 1 {
-        let index = subgroups[0].number;
-
-        if index == 0 {
-            subgroups[0].number = 1u8;
-        } else {
-            subgroups.push(LessonSubGroup {
-                number: if index == 1 { 2 } else { 1 },
-                cabinet: None,
-                teacher: "Только у другой".to_string(),
-            });
-        }
-    } else if subgroups.len() == 2 {
-        // если индексы отсутствуют у обоих, ставим поочерёдно
-        if subgroups[0].number == 0 && subgroups[1].number == 0 {
-            subgroups[0].number = 1;
-            subgroups[1].number = 2;
-        }
-        // если индекс отсутствует у первого, ставим 2, если у второго индекс 1 и наоборот
-        else if subgroups[0].number == 0 {
-            subgroups[0].number = if subgroups[1].number == 1 { 2 } else { 1 };
-        }
-        // если индекс отсутствует у второго, ставим 2, если у первого индекс 1 и наоборот
-        else if subgroups[1].number == 0 {
-            subgroups[1].number = if subgroups[0].number == 1 { 2 } else { 1 };
-        }
-    }
-
-    if subgroups.len() == 2 && subgroups[0].number == 2 && subgroups[1].number == 1 {
-        subgroups.reverse()
-    }
 
     Ok((lesson_name, subgroups, lesson_type))
 }
@@ -586,22 +575,30 @@ fn convert_groups_to_teachers(
                 let subgroups = group_lesson.subgroups.as_ref().unwrap();
 
                 for subgroup in subgroups {
-                    if subgroup.teacher == "Ошибка в расписании" {
+                    let teacher = match subgroup {
+                        None => continue,
+                        Some(subgroup) => match &subgroup.teacher {
+                            None => continue,
+                            Some(teacher) => teacher,
+                        },
+                    };
+
+                    if teacher == "Ошибка в расписании" {
                         continue;
                     }
 
-                    if !teachers.contains_key(&subgroup.teacher) {
+                    if !teachers.contains_key(teacher) {
                         teachers.insert(
-                            subgroup.teacher.clone(),
+                            teacher.clone(),
                             ScheduleEntry {
-                                name: subgroup.teacher.clone(),
+                                name: teacher.clone(),
                                 days: empty_days.to_vec(),
                             },
                         );
                     }
 
                     let teacher_day = teachers
-                        .get_mut(&subgroup.teacher)
+                        .get_mut(teacher)
                         .unwrap()
                         .days
                         .get_mut(index)
@@ -620,9 +617,8 @@ fn convert_groups_to_teachers(
 
     teachers.iter_mut().for_each(|(_, teacher)| {
         teacher.days.iter_mut().for_each(|day| {
-            day.lessons.sort_by(|a, b| {
-                a.default_range.as_ref().unwrap()[1].cmp(&b.default_range.as_ref().unwrap()[1])
-            })
+            day.lessons
+                .sort_by(|a, b| a.range.as_ref().unwrap()[1].cmp(&b.range.as_ref().unwrap()[1]))
         })
     });
 
@@ -754,12 +750,20 @@ pub mod tests {
         assert_eq!(thursday.lessons.len(), 1);
 
         let lesson = &thursday.lessons[0];
-        assert_eq!(lesson.default_range.unwrap()[1], 3);
+        assert_eq!(lesson.range.unwrap()[1], 3);
         assert!(lesson.subgroups.is_some());
 
         let subgroups = lesson.subgroups.as_ref().unwrap();
         assert_eq!(subgroups.len(), 2);
-        assert_eq!(subgroups[0].cabinet, Some("44".to_string()));
-        assert_eq!(subgroups[1].cabinet, Some("43".to_string()));
+
+        assert_eq!(
+            subgroups[0].as_ref().unwrap().cabinet,
+            Some("44".to_string())
+        );
+
+        assert_eq!(
+            subgroups[1].as_ref().unwrap().cabinet,
+            Some("43".to_string())
+        );
     }
 }

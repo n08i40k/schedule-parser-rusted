@@ -1,6 +1,6 @@
+use regex::Regex;
 use std::ops::Deref;
 use std::sync::LazyLock;
-use regex::Regex;
 
 /// XLS WorkSheet data.
 pub struct WorkSheet {

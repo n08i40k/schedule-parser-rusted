@@ -88,24 +88,21 @@ pub enum LessonType {
 
     /// Экзамен.
     ExamDefault,
-    
+
     /// Курсовой проект.
     CourseProject,
-    
+
     /// Защита курсового проекта.
     CourseProjectDefense,
 }
 
 #[derive(Clone, Hash, Debug, Serialize, Deserialize, ToSchema)]
 pub struct LessonSubGroup {
-    /// Index of subgroup.
-    pub number: u8,
-
     /// Cabinet, if present.
     pub cabinet: Option<String>,
 
     /// Full name of the teacher.
-    pub teacher: String,
+    pub teacher: Option<String>,
 }
 
 #[derive(Clone, Hash, Debug, Serialize, Deserialize, ToSchema)]
@@ -116,7 +113,7 @@ pub struct Lesson {
     pub lesson_type: LessonType,
 
     /// Lesson indexes, if present.
-    pub default_range: Option<[u8; 2]>,
+    pub range: Option<[u8; 2]>,
 
     /// Name.
     pub name: Option<String>,
@@ -125,8 +122,8 @@ pub struct Lesson {
     pub time: LessonBoundaries,
 
     /// List of subgroups.
-    #[serde(rename = "subGroups")]
-    pub subgroups: Option<Vec<LessonSubGroup>>,
+    #[serde(rename = "subgroups")]
+    pub subgroups: Option<Vec<Option<LessonSubGroup>>>,
 
     /// Group name, if this is a schedule for teachers.
     pub group: Option<String>,
