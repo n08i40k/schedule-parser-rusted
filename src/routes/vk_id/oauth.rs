@@ -1,6 +1,6 @@
 use self::schema::*;
-use crate::app_state::AppState;
-use crate::routes::schema::{IntoResponseAsError, ResponseError};
+use crate::routes::schema::ResponseError;
+use crate::state::AppState;
 use actix_web::{post, web};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -35,7 +35,7 @@ async fn oauth(data: web::Json<Request>, app_state: web::Data<AppState>) -> Serv
     let data = data.into_inner();
     let state = Uuid::new_v4().simple().to_string();
 
-    let vk_id = &app_state.vk_id;
+    let vk_id = &app_state.get_env().vk_id;
     let client_id = vk_id.client_id.clone().to_string();
 
     let mut params = HashMap::new();
@@ -56,27 +56,27 @@ async fn oauth(data: web::Json<Request>, app_state: web::Data<AppState>) -> Serv
     {
         Ok(res) => {
             if !res.status().is_success() {
-                return ErrorCode::VkIdError.into_response();
+                return Err(ErrorCode::VkIdError).into();
             }
 
             match res.json::<VkIdAuthResponse>().await {
-                Ok(auth_data) =>
-                    Ok(Response {
-                        access_token: auth_data.id_token,
-                    }).into(),
+                Ok(auth_data) => Ok(Response {
+                    access_token: auth_data.id_token,
+                }),
                 Err(error) => {
                     sentry::capture_error(&error);
-                    
-                    ErrorCode::VkIdError.into_response()
+
+                    Err(ErrorCode::VkIdError)
                 }
             }
         }
-        Err(_) => ErrorCode::VkIdError.into_response(),
+        Err(_) => Err(ErrorCode::VkIdError),
     }
+    .into()
 }
 
 mod schema {
-    use actix_macros::{IntoResponseErrorNamed, StatusCode};
+    use actix_macros::{ErrResponse, OkResponse};
     use derive_more::Display;
     use serde::{Deserialize, Serialize};
     use utoipa::ToSchema;
@@ -97,7 +97,7 @@ mod schema {
         pub device_id: String,
     }
 
-    #[derive(Serialize, ToSchema)]
+    #[derive(Serialize, ToSchema, OkResponse)]
     #[serde(rename_all = "camelCase")]
     #[schema(as = VkIdOAuth::Response)]
     pub struct Response {
@@ -105,7 +105,7 @@ mod schema {
         pub access_token: String,
     }
 
-    #[derive(Clone, Serialize, ToSchema, IntoResponseErrorNamed, StatusCode, Display)]
+    #[derive(Clone, Serialize, Display, ToSchema, ErrResponse)]
     #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
     #[schema(as = VkIdOAuth::ErrorCode)]
     #[status_code = "actix_web::http::StatusCode::NOT_ACCEPTABLE"]

@@ -1,15 +1,16 @@
-use crate::app_state::{AppState, app_state};
 use crate::middlewares::authorization::JWTAuthorization;
 use crate::middlewares::content_type::ContentTypeBootstrap;
+use crate::state::{AppState, new_app_state};
 use actix_web::dev::{ServiceFactory, ServiceRequest};
 use actix_web::{App, Error, HttpServer};
 use dotenvy::dotenv;
+use log::info;
 use std::io;
 use utoipa_actix_web::AppExt;
 use utoipa_actix_web::scope::Scope;
 use utoipa_rapidoc::RapiDoc;
 
-mod app_state;
+mod state;
 
 mod database;
 
@@ -46,7 +47,6 @@ pub fn get_api_scope<
             ignore: &["/group-names", "/teacher-names"],
         })
         .service(routes::schedule::schedule)
-        .service(routes::schedule::update_download_url)
         .service(routes::schedule::cache_status)
         .service(routes::schedule::group)
         .service(routes::schedule::group_names)
@@ -58,6 +58,13 @@ pub fn get_api_scope<
         .service(routes::fcm::update_callback)
         .service(routes::fcm::set_token);
 
+    let flow_scope = utoipa_actix_web::scope("/flow")
+        .wrap(JWTAuthorization {
+            ignore: &["/telegram-auth"],
+        })
+        .service(routes::flow::telegram_auth)
+        .service(routes::flow::telegram_complete);
+
     let vk_id_scope = utoipa_actix_web::scope("/vkid") //
         .service(routes::vk_id::oauth);
 
@@ -66,13 +73,14 @@ pub fn get_api_scope<
         .service(users_scope)
         .service(schedule_scope)
         .service(fcm_scope)
+        .service(flow_scope)
         .service(vk_id_scope)
 }
 
 async fn async_main() -> io::Result<()> {
-    println!("Starting server...");
+    info!("Запуск сервера...");
 
-    let app_state = app_state().await;
+    let app_state = new_app_state().await.unwrap();
 
     HttpServer::new(move || {
         let (app, api) = App::new()

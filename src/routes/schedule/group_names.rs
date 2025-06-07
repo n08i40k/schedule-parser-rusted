@@ -1,48 +1,34 @@
 use self::schema::*;
 use crate::AppState;
-use crate::routes::schedule::schema::ErrorCode;
-use crate::routes::schema::{IntoResponseAsError, ResponseError};
 use actix_web::{get, web};
 
-#[utoipa::path(responses(
-    (status = OK, body = Response),
-    (status = SERVICE_UNAVAILABLE, body = ResponseError<ErrorCode>),
-))]
+#[utoipa::path(responses((status = OK, body = Response)))]
 #[get("/group-names")]
-pub async fn group_names(app_state: web::Data<AppState>) -> ServiceResponse {
-    // Prevent thread lock
-    let schedule_lock = app_state.schedule.lock().unwrap();
+pub async fn group_names(app_state: web::Data<AppState>) -> Response {
+    let mut names: Vec<String> = app_state
+        .get_schedule_snapshot()
+        .await
+        .data
+        .groups
+        .keys()
+        .cloned()
+        .collect();
 
-    match schedule_lock.as_ref() {
-        None => ErrorCode::NoSchedule.into_response(),
-        Some(schedule) => {
-            let mut names: Vec<String> = schedule.data.groups.keys().cloned().collect();
-            names.sort();
-            
-            Ok(names.into()).into()
-        }
-    }
-    .into()
+    names.sort();
+
+    Response { names }
 }
 
 mod schema {
-    use crate::routes::schedule::schema::ErrorCode;
+    use actix_macros::ResponderJson;
     use serde::Serialize;
     use utoipa::ToSchema;
 
-    pub type ServiceResponse = crate::routes::schema::Response<Response, ErrorCode>;
-
-    #[derive(Serialize, ToSchema)]
+    #[derive(Serialize, ToSchema, ResponderJson)]
     #[schema(as = GetGroupNames::Response)]
     pub struct Response {
         /// List of group names sorted in alphabetical order.
         #[schema(examples(json!(["ИС-214/23"])))]
         pub names: Vec<String>,
-    }
-
-    impl From<Vec<String>> for Response {
-        fn from(names: Vec<String>) -> Self {
-            Self { names }
-        }
     }
 }

@@ -1,11 +1,11 @@
 use chrono::{DateTime, Utc};
-use derive_more::Display;
+use derive_more::{Display, Error};
 use std::mem::discriminant;
 use std::sync::Arc;
 use utoipa::ToSchema;
 
 /// XLS data retrieval errors.
-#[derive(Clone, Debug, ToSchema, Display)]
+#[derive(Clone, Debug, ToSchema, Display, Error)]
 pub enum FetchError {
     /// File url is not set.
     #[display("The link to the timetable was not provided earlier.")]
@@ -17,16 +17,38 @@ pub enum FetchError {
     Unknown(Arc<reqwest::Error>),
 
     /// Server returned a status code different from 200.
-    #[display("Server returned a status code {_0}.")]
-    BadStatusCode(u16),
+    #[display("Server returned a status code {status_code}.")]
+    BadStatusCode { status_code: u16 },
 
     /// The url leads to a file of a different type.
-    #[display("The link leads to a file of type '{_0}'.")]
-    BadContentType(String),
+    #[display("The link leads to a file of type '{content_type}'.")]
+    BadContentType { content_type: String },
 
     /// Server doesn't return expected headers.
-    #[display("Server doesn't return expected header(s) '{_0}'.")]
-    BadHeaders(String),
+    #[display("Server doesn't return expected header(s) '{expected_header}'.")]
+    BadHeaders { expected_header: String },
+}
+
+impl FetchError {
+    pub fn unknown(error: Arc<reqwest::Error>) -> Self {
+        Self::Unknown(error)
+    }
+
+    pub fn bad_status_code(status_code: u16) -> Self {
+        Self::BadStatusCode { status_code }
+    }
+
+    pub fn bad_content_type(content_type: &str) -> Self {
+        Self::BadContentType {
+            content_type: content_type.to_string(),
+        }
+    }
+
+    pub fn bad_headers(expected_header: &str) -> Self {
+        Self::BadHeaders {
+            expected_header: expected_header.to_string(),
+        }
+    }
 }
 
 impl PartialEq for FetchError {
@@ -37,9 +59,6 @@ impl PartialEq for FetchError {
 
 /// Result of XLS data retrieval.
 pub struct FetchOk {
-    /// ETag object.
-    pub etag: String,
-
     /// File upload date.
     pub uploaded_at: DateTime<Utc>,
 
@@ -52,9 +71,8 @@ pub struct FetchOk {
 
 impl FetchOk {
     /// Result without file content.
-    pub fn head(etag: String, uploaded_at: DateTime<Utc>) -> Self {
+    pub fn head(uploaded_at: DateTime<Utc>) -> Self {
         FetchOk {
-            etag,
             uploaded_at,
             requested_at: Utc::now(),
             data: None,
@@ -62,9 +80,8 @@ impl FetchOk {
     }
 
     /// Full result.
-    pub fn get(etag: String, uploaded_at: DateTime<Utc>, data: Vec<u8>) -> Self {
+    pub fn get(uploaded_at: DateTime<Utc>, data: Vec<u8>) -> Self {
         FetchOk {
-            etag,
             uploaded_at,
             requested_at: Utc::now(),
             data: Some(data),
@@ -79,5 +96,5 @@ pub trait XLSDownloader {
     async fn fetch(&self, head: bool) -> FetchResult;
 
     /// Setting the file link.
-    async fn set_url(&mut self, url: String) -> FetchResult;
+    async fn set_url(&mut self, url: &str) -> FetchResult;
 }

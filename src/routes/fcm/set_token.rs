@@ -1,14 +1,13 @@
-use crate::app_state::AppState;
 use crate::database;
 use crate::database::models::FCM;
 use crate::extractors::authorized_user::UserExtractor;
-use crate::extractors::base::SyncExtractor;
-use crate::utility::mutex::{MutexScope, MutexScopeAsync};
+use crate::extractors::base::AsyncExtractor;
+use crate::state::AppState;
 use actix_web::{HttpResponse, Responder, patch, web};
 use diesel::{RunQueryDsl, SaveChangesDsl};
-use firebase_messaging_rs::FCMClient;
-use firebase_messaging_rs::topic::{TopicManagementError, TopicManagementSupport};
+use firebase_messaging_rs::topic::TopicManagementSupport;
 use serde::Deserialize;
+use std::ops::DerefMut;
 
 #[derive(Debug, Deserialize)]
 struct Params {
@@ -34,11 +33,10 @@ async fn get_fcm(
                 topics: vec![],
             };
 
-            match app_state.database.scope(|conn| {
-                diesel::insert_into(database::schema::fcm::table)
-                    .values(&fcm)
-                    .execute(conn)
-            }) {
+            match diesel::insert_into(database::schema::fcm::table)
+                .values(&fcm)
+                .execute(app_state.get_database().await.deref_mut())
+            {
                 Ok(_) => Ok(fcm),
                 Err(e) => Err(e),
             }
@@ -51,7 +49,7 @@ async fn get_fcm(
 pub async fn set_token(
     app_state: web::Data<AppState>,
     web::Query(params): web::Query<Params>,
-    user_data: SyncExtractor<UserExtractor<true>>,
+    user_data: AsyncExtractor<UserExtractor<true>>,
 ) -> impl Responder {
     let user_data = user_data.into_inner();
 
@@ -75,39 +73,21 @@ pub async fn set_token(
         fcm.topics.push(Some("common".to_string()));
     }
 
-    // Subscribe to default topics.
-    if let Some(e) = app_state
-        .fcm_client
-        .as_ref()
-        .unwrap()
-        .async_scope(
-            async |client: &mut FCMClient| -> Result<(), TopicManagementError> {
-                let mut tokens: Vec<String> = Vec::new();
-                tokens.push(fcm.token.clone());
+    fcm.save_changes::<FCM>(app_state.get_database().await.deref_mut())
+        .unwrap();
 
-                for topic in fcm.topics.clone() {
-                    if let Some(topic) = topic {
-                        client.register_tokens_to_topic(topic.clone(), tokens.clone()).await?;
-                    }
-                }
+    let fcm_client = app_state.get_fcm_client().await.unwrap();
 
-                Ok(())
-            },
-        )
-        .await
-        .err()
-    {
-        eprintln!("Failed to subscribe token to topic: {:?}", e);
-        return HttpResponse::Ok();
-    }
-
-    // Write updates to db.
-    if let Some(e) = app_state
-        .database
-        .scope(|conn| fcm.save_changes::<FCM>(conn))
-        .err()
-    {
-        eprintln!("Failed to update FCM object: {e}");
+    for topic in fcm.topics.clone() {
+        if let Some(topic) = topic {
+            if let Err(error) = fcm_client
+                .register_token_to_topic(&*topic, &*fcm.token)
+                .await
+            {
+                eprintln!("Failed to subscribe token to topic: {:?}", error);
+                return HttpResponse::Ok();
+            }
+        }
     }
 
     HttpResponse::Ok()

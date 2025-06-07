@@ -57,18 +57,22 @@ pub trait FromRequestAsync: Sized {
     ///     web::Json(user)
     /// }
     /// ```
-    async fn from_request_async(req: HttpRequest, payload: Payload) -> Result<Self, Self::Error>;
+    async fn from_request_async(
+        req: &HttpRequest,
+        payload: &mut Payload,
+    ) -> Result<Self, Self::Error>;
 }
 
 impl<T: FromRequestAsync> FromRequest for AsyncExtractor<T> {
     type Error = T::Error;
     type Future = LocalBoxFuture<'static, Result<Self, Self::Error>>;
 
-    fn from_request(req: &HttpRequest, payload: &mut Payload) -> Self::Future {
+    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
         let req = req.clone();
-        let payload = payload.take();
+        let mut payload = Payload::None;
+        
         Box::pin(async move {
-            T::from_request_async(req, payload)
+            T::from_request_async(&req, &mut payload)
                 .await
                 .map(|res| Self(res))
         })
@@ -82,6 +86,7 @@ pub struct SyncExtractor<T>(T);
 
 impl<T> SyncExtractor<T> {
     /// Retrieving an object extracted with the extractor.
+    #[allow(unused)]
     pub fn into_inner(self) -> T {
         self.0
     }

@@ -1,14 +1,12 @@
 use self::schema::*;
 use crate::database::driver;
-use crate::database::models::User;
+use crate::database::driver::users::UserSave;
 use crate::routes::auth::shared::parse_vk_id;
-use crate::routes::auth::sign_in::schema::SignInData::{Default, Vk};
+use crate::routes::auth::sign_in::schema::SignInData::{Default, VkOAuth};
+use crate::routes::schema::ResponseError;
 use crate::routes::schema::user::UserResponse;
-use crate::routes::schema::{IntoResponseAsError, ResponseError};
-use crate::utility::mutex::MutexScope;
 use crate::{AppState, utility};
 use actix_web::{post, web};
-use diesel::SaveChangesDsl;
 use web::Json;
 
 async fn sign_in_combined(
@@ -16,14 +14,18 @@ async fn sign_in_combined(
     app_state: &web::Data<AppState>,
 ) -> Result<UserResponse, ErrorCode> {
     let user = match &data {
-        Default(data) => driver::users::get_by_username(&app_state, &data.username),
-        Vk(id) => driver::users::get_by_vk_id(&app_state, *id),
+        Default(data) => driver::users::get_by_username(&app_state, &data.username).await,
+        VkOAuth(id) => driver::users::get_by_vk_id(&app_state, *id).await,
     };
 
     match user {
         Ok(mut user) => {
             if let Default(data) = data {
-                match bcrypt::verify(&data.password, &user.password) {
+                if user.password.is_none() {
+                    return Err(ErrorCode::IncorrectCredentials);
+                }
+
+                match bcrypt::verify(&data.password, &user.password.as_ref().unwrap()) {
                     Ok(result) => {
                         if !result {
                             return Err(ErrorCode::IncorrectCredentials);
@@ -35,12 +37,9 @@ async fn sign_in_combined(
                 }
             }
 
-            user.access_token = utility::jwt::encode(&user.id);
+            user.access_token = Some(utility::jwt::encode(&user.id));
 
-            app_state.database.scope(|conn| {
-                user.save_changes::<User>(conn)
-                    .expect("Failed to update user")
-            });
+            user.save(&app_state).await.expect("Failed to update user");
 
             Ok(user.into())
         }
@@ -71,15 +70,17 @@ pub async fn sign_in_vk(
 ) -> ServiceResponse {
     let data = data_json.into_inner();
 
-    match parse_vk_id(&data.access_token, app_state.vk_id.client_id) {
-        Ok(id) => sign_in_combined(Vk(id), &app_state).await.into(),
-        Err(_) => ErrorCode::InvalidVkAccessToken.into_response(),
+    match parse_vk_id(&data.access_token, app_state.get_env().vk_id.client_id) {
+        Ok(id) => sign_in_combined(VkOAuth(id), &app_state).await,
+        Err(_) => Err(ErrorCode::InvalidVkAccessToken),
     }
+    .into()
 }
 
 mod schema {
     use crate::routes::schema::user::UserResponse;
-    use actix_macros::{IntoResponseError, StatusCode};
+    use actix_macros::ErrResponse;
+    use derive_more::Display;
     use serde::{Deserialize, Serialize};
     use utoipa::ToSchema;
 
@@ -109,15 +110,17 @@ mod schema {
 
     pub type ServiceResponse = crate::routes::schema::Response<UserResponse, ErrorCode>;
 
-    #[derive(Serialize, ToSchema, Clone, IntoResponseError, StatusCode)]
-    #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+    #[derive(Clone, Serialize, Display, ToSchema, ErrResponse)]
     #[schema(as = SignIn::ErrorCode)]
+    #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
     #[status_code = "actix_web::http::StatusCode::NOT_ACCEPTABLE"]
     pub enum ErrorCode {
         /// Incorrect username or password.
+        #[display("Incorrect username or password.")]
         IncorrectCredentials,
 
         /// Invalid VK ID token.
+        #[display("Invalid VK ID token.")]
         InvalidVkAccessToken,
     }
 
@@ -129,7 +132,7 @@ mod schema {
         Default(Request),
 
         /// Identifier of the attached account VK.
-        Vk(i32),
+        VkOAuth(i32),
     }
 }
 
@@ -150,7 +153,7 @@ mod tests {
     use std::fmt::Write;
 
     async fn sign_in_client(data: Request) -> ServiceResponse {
-        let app = test_app(test_app_state(Default::default()).await, sign_in).await;
+        let app = test_app(test_app_state().await, sign_in).await;
 
         let req = test::TestRequest::with_uri("/sign-in")
             .method(Method::POST)
@@ -184,14 +187,16 @@ mod tests {
             &User {
                 id: id.clone(),
                 username,
-                password: bcrypt::hash("example".to_string(), bcrypt::DEFAULT_COST).unwrap(),
+                password: Some(bcrypt::hash("example".to_string(), bcrypt::DEFAULT_COST).unwrap()),
                 vk_id: None,
-                access_token: utility::jwt::encode(&id),
-                group: "ИС-214/23".to_string(),
+                telegram_id: None,
+                access_token: Some(utility::jwt::encode(&id)),
+                group: Some("ИС-214/23".to_string()),
                 role: UserRole::Student,
-                version: "1.0.0".to_string(),
+                android_version: None,
             },
         )
+        .await
         .unwrap();
     }
 

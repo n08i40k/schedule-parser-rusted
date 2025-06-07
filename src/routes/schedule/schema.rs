@@ -1,25 +1,18 @@
-use crate::app_state::{AppState, Schedule};
-use schedule_parser::schema::ScheduleEntry;
-use actix_macros::{IntoResponseErrorNamed, ResponderJson, StatusCode};
+use crate::state::{AppState, ScheduleSnapshot};
+use actix_macros::{OkResponse, ResponderJson};
 use actix_web::web;
-use chrono::{DateTime, Duration, Utc};
-use derive_more::Display;
+use schedule_parser::schema::ScheduleEntry;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::ops::Deref;
 use utoipa::ToSchema;
 
 /// Response from schedule server.
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, ToSchema, OkResponse, ResponderJson)]
 #[serde(rename_all = "camelCase")]
 pub struct ScheduleView {
-    /// ETag schedules on polytechnic server.
-    etag: String,
-
-    /// Schedule update date on polytechnic website.
-    uploaded_at: DateTime<Utc>,
-
-    /// Date last downloaded from the Polytechnic server.
-    downloaded_at: DateTime<Utc>,
+    /// Url to xls file.
+    url: String,
 
     /// Groups schedule.
     groups: HashMap<String, ScheduleEntry>,
@@ -28,80 +21,55 @@ pub struct ScheduleView {
     teachers: HashMap<String, ScheduleEntry>,
 }
 
-#[derive(Clone, Serialize, ToSchema, StatusCode, Display, IntoResponseErrorNamed)]
-#[status_code = "actix_web::http::StatusCode::SERVICE_UNAVAILABLE"]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-#[schema(as = ScheduleShared::ErrorCode)]
-pub enum ErrorCode {
-    /// Schedules not yet parsed.
-    #[display("Schedule not parsed yet.")]
-    NoSchedule,
+#[derive(Serialize, ToSchema, OkResponse)]
+pub struct ScheduleEntryResponse(ScheduleEntry);
+
+impl From<ScheduleEntry> for ScheduleEntryResponse {
+    fn from(value: ScheduleEntry) -> Self {
+        Self(value)
+    }
 }
 
-impl TryFrom<&web::Data<AppState>> for ScheduleView {
-    type Error = ErrorCode;
+impl ScheduleView {
+    pub async fn from(app_state: &web::Data<AppState>) -> Self {
+        let schedule = app_state.get_schedule_snapshot().await.clone();
 
-    fn try_from(app_state: &web::Data<AppState>) -> Result<Self, Self::Error> {
-        if let Some(schedule) = app_state.schedule.lock().unwrap().clone() {
-            Ok(Self {
-                etag: schedule.etag,
-                uploaded_at: schedule.updated_at,
-                downloaded_at: schedule.parsed_at,
-                groups: schedule.data.groups,
-                teachers: schedule.data.teachers,
-            })
-        } else {
-            Err(ErrorCode::NoSchedule)
+        Self {
+            url: schedule.url,
+            groups: schedule.data.groups,
+            teachers: schedule.data.teachers,
         }
     }
 }
 
 /// Cached schedule status.
-#[derive(Serialize, Deserialize, ToSchema, ResponderJson)]
+#[derive(Serialize, Deserialize, ToSchema, ResponderJson, OkResponse)]
 #[serde(rename_all = "camelCase")]
 pub struct CacheStatus {
     /// Schedule hash.
-    pub cache_hash: String,
-
-    /// Whether the schedule reference needs to be updated.
-    pub cache_update_required: bool,
+    pub hash: String,
 
     /// Last cache update date.
-    pub last_cache_update: i64,
+    pub fetched_at: i64,
 
     /// Cached schedule update date.
     ///
     /// Determined by the polytechnic's server.
-    pub last_schedule_update: i64,
+    pub updated_at: i64,
 }
 
 impl CacheStatus {
-    pub fn default() -> Self {
-        CacheStatus {
-            cache_hash: "0000000000000000000000000000000000000000".to_string(),
-            cache_update_required: true,
-            last_cache_update: 0,
-            last_schedule_update: 0,
-        }
+    pub async fn from(value: &web::Data<AppState>) -> Self {
+        From::<&ScheduleSnapshot>::from(value.get_schedule_snapshot().await.deref())
     }
 }
 
-impl From<&web::Data<AppState>> for CacheStatus {
-    fn from(value: &web::Data<AppState>) -> Self {
-        let schedule_lock = value.schedule.lock().unwrap();
-        let schedule = schedule_lock.as_ref().unwrap();
-
-        CacheStatus::from(schedule)
-    }
-}
-
-impl From<&Schedule> for CacheStatus {
-    fn from(value: &Schedule) -> Self {
+impl From<&ScheduleSnapshot> for CacheStatus {
+    fn from(value: &ScheduleSnapshot) -> Self {
         Self {
-            cache_hash: value.hash(),
-            cache_update_required: (Utc::now() - value.fetched_at) > Duration::minutes(5),
-            last_cache_update: value.fetched_at.timestamp(),
-            last_schedule_update: value.updated_at.timestamp(),
+            hash: value.hash(),
+            fetched_at: value.fetched_at.timestamp(),
+            updated_at: value.updated_at.timestamp(),
         }
     }
 }

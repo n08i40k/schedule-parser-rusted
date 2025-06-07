@@ -2,11 +2,10 @@ use self::schema::*;
 use crate::AppState;
 use crate::database::driver;
 use crate::database::models::UserRole;
-use crate::routes::auth::shared::{Error, parse_vk_id};
+use crate::routes::auth::shared::parse_vk_id;
+use crate::routes::schema::ResponseError;
 use crate::routes::schema::user::UserResponse;
-use crate::routes::schema::{IntoResponseAsError, ResponseError};
 use actix_web::{post, web};
-use rand::{Rng, rng};
 use web::Json;
 
 async fn sign_up_combined(
@@ -18,29 +17,30 @@ async fn sign_up_combined(
         return Err(ErrorCode::DisallowedRole);
     }
 
-    // If specified group doesn't exist in schedule.
-    let schedule_opt = app_state.schedule.lock().unwrap();
-
-    if let Some(schedule) = &*schedule_opt {
-        if !schedule.data.groups.contains_key(&data.group) {
-            return Err(ErrorCode::InvalidGroupName);
-        }
+    if !app_state
+        .get_schedule_snapshot()
+        .await
+        .data
+        .groups
+        .contains_key(&data.group)
+    {
+        return Err(ErrorCode::InvalidGroupName);
     }
 
     // If user with specified username already exists.
-    if driver::users::contains_by_username(&app_state, &data.username) {
+    if driver::users::contains_by_username(&app_state, &data.username).await {
         return Err(ErrorCode::UsernameAlreadyExists);
     }
 
     // If user with specified VKID already exists.
     if let Some(id) = data.vk_id {
-        if driver::users::contains_by_vk_id(&app_state, id) {
+        if driver::users::contains_by_vk_id(&app_state, id).await {
             return Err(ErrorCode::VkAlreadyExists);
         }
     }
 
     let user = data.into();
-    driver::users::insert(&app_state, &user).unwrap();
+    driver::users::insert(&app_state, &user).await.unwrap();
 
     Ok(UserResponse::from(&user)).into()
 }
@@ -56,7 +56,7 @@ pub async fn sign_up(data_json: Json<Request>, app_state: web::Data<AppState>) -
     sign_up_combined(
         SignUpData {
             username: data.username,
-            password: data.password,
+            password: Some(data.password),
             vk_id: None,
             group: data.group,
             role: data.role,
@@ -79,40 +79,32 @@ pub async fn sign_up_vk(
 ) -> ServiceResponse {
     let data = data_json.into_inner();
 
-    match parse_vk_id(&data.access_token, app_state.vk_id.client_id) {
-        Ok(id) => sign_up_combined(
-            SignUpData {
-                username: data.username,
-                password: rng()
-                    .sample_iter(&rand::distr::Alphanumeric)
-                    .take(16)
-                    .map(char::from)
-                    .collect(),
-                vk_id: Some(id),
-                group: data.group,
-                role: data.role,
-                version: data.version,
-            },
-            &app_state,
-        )
-        .await
-        .into(),
-        Err(err) => {
-            if err != Error::Expired {
-                eprintln!("Failed to parse vk id token!");
-                eprintln!("{:?}", err);
-            }
-
-            ErrorCode::InvalidVkAccessToken.into_response()
+    match parse_vk_id(&data.access_token, app_state.get_env().vk_id.client_id) {
+        Ok(id) => {
+            sign_up_combined(
+                SignUpData {
+                    username: data.username,
+                    password: None,
+                    vk_id: Some(id),
+                    group: data.group,
+                    role: data.role,
+                    version: data.version,
+                },
+                &app_state,
+            )
+            .await
         }
+        Err(_) => Err(ErrorCode::InvalidVkAccessToken),
     }
+    .into()
 }
 
 mod schema {
     use crate::database::models::{User, UserRole};
     use crate::routes::schema::user::UserResponse;
     use crate::utility;
-    use actix_macros::{IntoResponseError, StatusCode};
+    use actix_macros::ErrResponse;
+    use derive_more::Display;
     use objectid::ObjectId;
     use serde::{Deserialize, Serialize};
 
@@ -170,24 +162,29 @@ mod schema {
 
     pub type ServiceResponse = crate::routes::schema::Response<UserResponse, ErrorCode>;
 
-    #[derive(Clone, Serialize, utoipa::ToSchema, IntoResponseError, StatusCode)]
+    #[derive(Clone, Serialize, Display, utoipa::ToSchema, ErrResponse)]
     #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
     #[schema(as = SignUp::ErrorCode)]
     #[status_code = "actix_web::http::StatusCode::NOT_ACCEPTABLE"]
     pub enum ErrorCode {
         /// Conveyed the role of Admin.
+        #[display("Conveyed the role of Admin.")]
         DisallowedRole,
 
         /// Unknown name of the group.
+        #[display("Unknown name of the group.")]
         InvalidGroupName,
 
         /// User with this name is already registered.
+        #[display("User with this name is already registered.")]
         UsernameAlreadyExists,
 
         /// Invalid VK ID token.
+        #[display("Invalid VK ID token.")]
         InvalidVkAccessToken,
 
         /// User with such an account VK is already registered.
+        #[display("User with such an account VK is already registered.")]
         VkAlreadyExists,
     }
 
@@ -195,13 +192,14 @@ mod schema {
 
     /// Data for registration.
     pub struct SignUpData {
+        // TODO: сделать ограничение на минимальную и максимальную длину при регистрации и смене.
         /// User name.
         pub username: String,
 
         /// Password.
         ///
         /// Should be present even if registration occurs using the VK ID token.
-        pub password: String,
+        pub password: Option<String>,
 
         /// Account identifier VK.
         pub vk_id: Option<i32>,
@@ -218,18 +216,23 @@ mod schema {
 
     impl Into<User> for SignUpData {
         fn into(self) -> User {
+            assert_ne!(self.password.is_some(), self.vk_id.is_some());
+
             let id = ObjectId::new().unwrap().to_string();
-            let access_token = utility::jwt::encode(&id);
+            let access_token = Some(utility::jwt::encode(&id));
 
             User {
                 id,
                 username: self.username,
-                password: bcrypt::hash(self.password, bcrypt::DEFAULT_COST).unwrap(),
+                password: self
+                    .password
+                    .map(|x| bcrypt::hash(x, bcrypt::DEFAULT_COST).unwrap()),
                 vk_id: self.vk_id,
+                telegram_id: None,
                 access_token,
-                group: self.group,
+                group: Some(self.group),
                 role: self.role,
-                version: self.version,
+                android_version: Some(self.version),
             }
         }
     }
@@ -241,42 +244,28 @@ mod tests {
     use crate::database::models::UserRole;
     use crate::routes::auth::sign_up::schema::Request;
     use crate::routes::auth::sign_up::sign_up;
-    use crate::test_env::tests::{
-        TestAppStateParams, TestScheduleType, static_app_state, test_app_state, test_env,
-    };
+    use crate::test_env::tests::{static_app_state, test_app_state, test_env};
     use actix_test::test_app;
     use actix_web::dev::ServiceResponse;
     use actix_web::http::Method;
     use actix_web::http::StatusCode;
     use actix_web::test;
 
-    struct SignUpPartial {
-        username: String,
-        group: String,
+    struct SignUpPartial<'a> {
+        username: &'a str,
+        group: &'a str,
         role: UserRole,
-        load_schedule: bool,
     }
 
-    async fn sign_up_client(data: SignUpPartial) -> ServiceResponse {
-        let app = test_app(
-            test_app_state(TestAppStateParams {
-                schedule: if data.load_schedule {
-                    TestScheduleType::Local
-                } else {
-                    TestScheduleType::None
-                },
-            })
-            .await,
-            sign_up,
-        )
-        .await;
+    async fn sign_up_client(data: SignUpPartial<'_>) -> ServiceResponse {
+        let app = test_app(test_app_state().await, sign_up).await;
 
         let req = test::TestRequest::with_uri("/sign-up")
             .method(Method::POST)
             .set_json(Request {
-                username: data.username.clone(),
+                username: data.username.to_string(),
                 password: "example".to_string(),
-                group: data.group.clone(),
+                group: data.group.to_string(),
                 role: data.role.clone(),
                 version: "1.0.0".to_string(),
             })
@@ -292,15 +281,14 @@ mod tests {
         test_env();
 
         let app_state = static_app_state().await;
-        driver::users::delete_by_username(&app_state, &"test::sign_up_valid".to_string());
+        driver::users::delete_by_username(&app_state, &"test::sign_up_valid".to_string()).await;
 
         // test
 
         let resp = sign_up_client(SignUpPartial {
-            username: "test::sign_up_valid".to_string(),
-            group: "ИС-214/23".to_string(),
+            username: "test::sign_up_valid",
+            group: "ИС-214/23",
             role: UserRole::Student,
-            load_schedule: false,
         })
         .await;
 
@@ -314,23 +302,21 @@ mod tests {
         test_env();
 
         let app_state = static_app_state().await;
-        driver::users::delete_by_username(&app_state, &"test::sign_up_multiple".to_string());
+        driver::users::delete_by_username(&app_state, &"test::sign_up_multiple".to_string()).await;
 
         let create = sign_up_client(SignUpPartial {
-            username: "test::sign_up_multiple".to_string(),
-            group: "ИС-214/23".to_string(),
+            username: "test::sign_up_multiple",
+            group: "ИС-214/23",
             role: UserRole::Student,
-            load_schedule: false,
         })
         .await;
 
         assert_eq!(create.status(), StatusCode::OK);
 
         let resp = sign_up_client(SignUpPartial {
-            username: "test::sign_up_multiple".to_string(),
-            group: "ИС-214/23".to_string(),
+            username: "test::sign_up_multiple",
+            group: "ИС-214/23",
             role: UserRole::Student,
-            load_schedule: false,
         })
         .await;
 
@@ -343,10 +329,9 @@ mod tests {
 
         // test
         let resp = sign_up_client(SignUpPartial {
-            username: "test::sign_up_invalid_role".to_string(),
-            group: "ИС-214/23".to_string(),
+            username: "test::sign_up_invalid_role",
+            group: "ИС-214/23",
             role: UserRole::Admin,
-            load_schedule: false,
         })
         .await;
 
@@ -359,10 +344,9 @@ mod tests {
 
         // test
         let resp = sign_up_client(SignUpPartial {
-            username: "test::sign_up_invalid_group".to_string(),
-            group: "invalid_group".to_string(),
+            username: "test::sign_up_invalid_group",
+            group: "invalid_group",
             role: UserRole::Student,
-            load_schedule: true,
         })
         .await;
 

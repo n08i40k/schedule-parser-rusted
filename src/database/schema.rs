@@ -21,12 +21,13 @@ diesel::table! {
     users (id) {
         id -> Text,
         username -> Text,
-        password -> Text,
+        password -> Nullable<Text>,
         vk_id -> Nullable<Int4>,
-        access_token -> Text,
-        group -> Text,
+        access_token -> Nullable<Text>,
+        group -> Nullable<Text>,
         role -> UserRole,
-        version -> Text,
+        android_version -> Nullable<Text>,
+        telegram_id -> Nullable<Int8>,
     }
 }
 

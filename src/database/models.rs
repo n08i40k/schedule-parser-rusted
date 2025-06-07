@@ -38,22 +38,25 @@ pub struct User {
     pub username: String,
 
     /// BCrypt password hash.
-    pub password: String,
+    pub password: Option<String>,
 
     /// ID of the linked VK account.
     pub vk_id: Option<i32>,
 
     /// JWT access token.
-    pub access_token: String,
+    pub access_token: Option<String>,
 
     /// Group.
-    pub group: String,
+    pub group: Option<String>,
 
     /// Role.
     pub role: UserRole,
 
     /// Version of the installed Polytechnic+ application.
-    pub version: String,
+    pub android_version: Option<String>,
+
+    /// ID of the linked Telegram account.
+    pub telegram_id: Option<i64>,
 }
 
 #[derive(

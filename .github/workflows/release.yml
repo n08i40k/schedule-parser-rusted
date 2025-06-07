@@ -44,10 +44,15 @@ jobs:
           cargo test --verbose
         env:
           DATABASE_URL: ${{ env.TEST_DB }}
+          SCHEDULE_DISABLE_AUTO_UPDATE: 1
           JWT_SECRET: "test-secret-at-least-256-bits-used"
-          VKID_CLIENT_ID: 0
-          VKID_REDIRECT_URI: "vk0://vk.com/blank.html"
-          REQWEST_USER_AGENT: "Dalvik/2.1.0 (Linux; U; Android 6.0.1; OPPO R9s Build/MMB29M)"
+          VK_ID_CLIENT_ID: 0
+          VK_ID_REDIRECT_URI: "vk0://vk.com/blank.html"
+          TELEGRAM_BOT_ID: 0
+          TELEGRAM_MINI_APP_HOST: example.com
+          TELEGRAM_TEST_DC: false
+          YANDEX_CLOUD_API_KEY: ""
+          YANDEX_CLOUD_FUNC_ID: ""
   build:
     name: Build
     runs-on: ubuntu-latest

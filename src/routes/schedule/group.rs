@@ -1,12 +1,13 @@
 use self::schema::*;
 use crate::AppState;
 use crate::database::models::User;
-use crate::extractors::base::SyncExtractor;
-use crate::routes::schema::{IntoResponseAsError, ResponseError};
+use crate::extractors::base::AsyncExtractor;
+use crate::routes::schedule::schema::ScheduleEntryResponse;
+use crate::routes::schema::ResponseError;
 use actix_web::{get, web};
 
 #[utoipa::path(responses(
-    (status = OK, body = Response),
+    (status = OK, body = ScheduleEntryResponse),
     (
         status = SERVICE_UNAVAILABLE,
         body = ResponseError<ErrorCode>,
@@ -25,68 +26,42 @@ use actix_web::{get, web};
     ),
 ))]
 #[get("/group")]
-pub async fn group(user: SyncExtractor<User>, app_state: web::Data<AppState>) -> ServiceResponse {
-    // Prevent thread lock
-    let schedule_lock = app_state.schedule.lock().unwrap();
+pub async fn group(user: AsyncExtractor<User>, app_state: web::Data<AppState>) -> ServiceResponse {
+    match &user.into_inner().group {
+        None => Err(ErrorCode::SignUpNotCompleted),
 
-    match schedule_lock.as_ref() {
-        None => ErrorCode::NoSchedule.into_response(),
-        Some(schedule) => match schedule.data.groups.get(&user.into_inner().group) {
-            None => ErrorCode::NotFound.into_response(),
-            Some(entry) => Ok(entry.clone().into()).into(),
+        Some(group) => match app_state
+            .get_schedule_snapshot()
+            .await
+            .data
+            .groups
+            .get(group)
+        {
+            None => Err(ErrorCode::NotFound),
+
+            Some(entry) => Ok(entry.clone().into()),
         },
     }
+    .into()
 }
 
 mod schema {
-    use schedule_parser::schema::ScheduleEntry;
-    use actix_macros::{IntoResponseErrorNamed, StatusCode};
-    use chrono::{DateTime, NaiveDateTime, Utc};
+    use crate::routes::schedule::schema::ScheduleEntryResponse;
+    use actix_macros::ErrResponse;
     use derive_more::Display;
     use serde::Serialize;
     use utoipa::ToSchema;
 
-    pub type ServiceResponse = crate::routes::schema::Response<Response, ErrorCode>;
+    pub type ServiceResponse = crate::routes::schema::Response<ScheduleEntryResponse, ErrorCode>;
 
-    #[derive(Serialize, ToSchema)]
-    #[schema(as = GetGroup::Response)]
-    #[serde(rename_all = "camelCase")]
-    pub struct Response {
-        /// Group schedule.
-        pub group: ScheduleEntry,
-
-        /// ## Outdated variable.
-        ///
-        /// By default, an empty list is returned.
-        #[deprecated = "Will be removed in future versions"]
-        pub updated: Vec<i32>,
-
-        /// ## Outdated variable.
-        ///
-        /// By default, the initial date for unix.
-        #[deprecated = "Will be removed in future versions"]
-        pub updated_at: DateTime<Utc>,
-    }
-
-    #[allow(deprecated)]
-    impl From<ScheduleEntry> for Response {
-        fn from(group: ScheduleEntry) -> Self {
-            Self {
-                group,
-                updated: Vec::new(),
-                updated_at: NaiveDateTime::default().and_utc(),
-            }
-        }
-    }
-
-    #[derive(Clone, Serialize, ToSchema, StatusCode, Display, IntoResponseErrorNamed)]
+    #[derive(Clone, Serialize, Display, ToSchema, ErrResponse)]
     #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
     #[schema(as = GroupSchedule::ErrorCode)]
     pub enum ErrorCode {
-        /// Schedules have not yet been parsed.
-        #[status_code = "actix_web::http::StatusCode::SERVICE_UNAVAILABLE"]
-        #[display("Schedule not parsed yet.")]
-        NoSchedule,
+        /// The user tried to access the API without completing singing up.
+        #[status_code = "actix_web::http::StatusCode::FORBIDDEN"]
+        #[display("You have not completed signing up.")]
+        SignUpNotCompleted,
 
         /// Group not found.
         #[status_code = "actix_web::http::StatusCode::NOT_FOUND"]

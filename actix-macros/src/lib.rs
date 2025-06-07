@@ -62,7 +62,7 @@ mod shared {
     }
 }
 
-mod response_error_message {
+mod middleware_error {
     use proc_macro::TokenStream;
     use quote::quote;
 
@@ -81,28 +81,7 @@ mod response_error_message {
 
                 fn error_response(&self) -> ::actix_web::HttpResponse<BoxBody> {
                     ::actix_web::HttpResponse::build(self.status_code())
-                        .json(crate::utility::error::ResponseErrorMessage::new(self.clone()))
-                }
-            }
-        })
-    }
-}
-
-mod status_code {
-    use proc_macro::TokenStream;
-    use quote::quote;
-
-    pub fn fmt(ast: &syn::DeriveInput) -> TokenStream {
-        let name = &ast.ident;
-
-        let status_code_arms = super::shared::get_arms(ast);
-
-        TokenStream::from(quote! {
-            impl crate::routes::schema::PartialStatusCode for #name {
-                fn status_code(&self) -> ::actix_web::http::StatusCode {
-                    match self {
-                        #(#status_code_arms)*
-                    }
+                        .json(crate::utility::error::MiddlewareError::new(self.clone()))
                 }
             }
         })
@@ -130,7 +109,7 @@ mod responder_json {
     }
 }
 
-mod into_response_error {
+mod ok_response {
     use proc_macro::TokenStream;
     use quote::quote;
 
@@ -138,46 +117,37 @@ mod into_response_error {
         let name = &ast.ident;
 
         TokenStream::from(quote! {
-            impl ::core::convert::Into<crate::routes::schema::ResponseError<#name>> for #name {
-                fn into(self) -> crate::routes::schema::ResponseError<#name> {
-                    crate::routes::schema::ResponseError {
-                        code: self,
-                        message: ::core::option::Option::None,
-                    }
-                }
-            }
-
-            impl<T> crate::routes::schema::IntoResponseAsError<T> for #name
-            where
-                T: ::serde::ser::Serialize + ::utoipa::PartialSchema {}
-        })
-    }
-
-    pub fn fmt_named(ast: &syn::DeriveInput) -> TokenStream {
-        let name = &ast.ident;
-
-        TokenStream::from(quote! {
-            impl ::core::convert::Into<crate::routes::schema::ResponseError<#name>> for #name {
-                fn into(self) -> crate::routes::schema::ResponseError<#name> {
-                    crate::routes::schema::ResponseError {
-                        message: ::core::option::Option::Some(format!("{}", self)),
-                        code: self,
-                    }
-                }
-            }
-
-            impl<T> crate::routes::schema::IntoResponseAsError<T> for #name
-            where
-                T: ::serde::ser::Serialize + ::utoipa::PartialSchema {}
+            impl crate::routes::schema::PartialOkResponse for #name {}
         })
     }
 }
 
-#[proc_macro_derive(ResponseErrorMessage, attributes(status_code))]
-pub fn rem_derive(input: TokenStream) -> TokenStream {
+mod err_response {
+    use proc_macro::TokenStream;
+    use quote::quote;
+
+    pub fn fmt(ast: &syn::DeriveInput) -> TokenStream {
+        let name = &ast.ident;
+
+        let status_code_arms = super::shared::get_arms(ast);
+
+        TokenStream::from(quote! {
+            impl crate::routes::schema::PartialErrResponse for #name {
+                fn status_code(&self) -> ::actix_web::http::StatusCode {
+                    match self {
+                        #(#status_code_arms)*
+                    }
+                }
+            }
+        })
+    }
+}
+
+#[proc_macro_derive(MiddlewareError, attributes(status_code))]
+pub fn moddleware_error_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
 
-    response_error_message::fmt(&ast)
+    middleware_error::fmt(&ast)
 }
 
 #[proc_macro_derive(ResponderJson)]
@@ -187,23 +157,16 @@ pub fn responser_json_derive(input: TokenStream) -> TokenStream {
     responder_json::fmt(&ast)
 }
 
-#[proc_macro_derive(IntoResponseError)]
-pub fn into_response_error_derive(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(OkResponse)]
+pub fn ok_response_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
 
-    into_response_error::fmt(&ast)
+    ok_response::fmt(&ast)
 }
 
-#[proc_macro_derive(IntoResponseErrorNamed)]
-pub fn into_response_error_named_derive(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(ErrResponse, attributes(status_code))]
+pub fn err_response_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
 
-    into_response_error::fmt_named(&ast)
-}
-
-#[proc_macro_derive(StatusCode, attributes(status_code))]
-pub fn status_code_derive(input: TokenStream) -> TokenStream {
-    let ast = syn::parse(input).unwrap();
-
-    status_code::fmt(&ast)
+    err_response::fmt(&ast)
 }

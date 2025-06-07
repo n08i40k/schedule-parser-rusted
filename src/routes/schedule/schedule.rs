@@ -1,25 +1,9 @@
-use self::schema::*;
-use crate::app_state::AppState;
-use crate::routes::schedule::schema::{ErrorCode, ScheduleView};
-use crate::routes::schema::{IntoResponseAsError, ResponseError};
+use crate::routes::schedule::schema::ScheduleView;
+use crate::state::AppState;
 use actix_web::{get, web};
 
-#[utoipa::path(responses(
-    (status = OK, body = ScheduleView),
-    (status = SERVICE_UNAVAILABLE, body = ResponseError<ErrorCode>)
-))]
+#[utoipa::path(responses((status = OK, body = ScheduleView)))]
 #[get("/")]
-pub async fn schedule(app_state: web::Data<AppState>) -> ServiceResponse {
-    match ScheduleView::try_from(&app_state) {
-        Ok(res) => Ok(res).into(),
-        Err(e) => match e {
-            ErrorCode::NoSchedule => ErrorCode::NoSchedule.into_response(),
-        },
-    }
-}
-
-mod schema {
-    use crate::routes::schedule::schema::{ErrorCode, ScheduleView};
-
-    pub type ServiceResponse = crate::routes::schema::Response<ScheduleView, ErrorCode>;
+pub async fn schedule(app_state: web::Data<AppState>) -> ScheduleView {
+    ScheduleView::from(&app_state).await
 }
