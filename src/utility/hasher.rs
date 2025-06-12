@@ -1,4 +1,6 @@
 use sha1::Digest;
+use sha1::digest::OutputSizeUser;
+use sha1::digest::typenum::Unsigned;
 use std::hash::Hasher;
 
 /// Hesher returning hash from the algorithm implementing Digest
@@ -12,7 +14,20 @@ where
 {
     /// Obtain hash.
     pub fn finalize(self) -> String {
-        hex::encode(self.digest.finalize().0)
+        static ALPHABET: [char; 16] = [
+            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F',
+        ];
+        
+        let mut hex = String::with_capacity(<D as OutputSizeUser>::OutputSize::USIZE * 2);
+
+        for byte in self.digest.finalize().0.into_iter() {
+            let byte: u8 = byte;
+
+            hex.push(ALPHABET[(byte >> 4) as usize]);
+            hex.push(ALPHABET[(byte & 0xF) as usize]);
+        }
+
+        hex
     }
 }
 

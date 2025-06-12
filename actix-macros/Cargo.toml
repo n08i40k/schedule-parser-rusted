@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-syn = "2.0.100"
-quote = "1.0.40"
-proc-macro2 = "1.0.94"
+syn = "2"
+quote = "1"
+proc-macro2 = "1"
 
 [lib]
 proc-macro = true
