@@ -9,7 +9,9 @@ pub(crate) mod tests {
 
     pub fn test_env() {
         info!("Loading test environment file...");
-        dotenvy::from_path(".env.test").expect("Failed to load test environment file");
+        dotenvy::from_filename(".env.test.local")
+            .or_else(|_| dotenvy::from_filename(".env.test"))
+            .expect("Failed to load test environment file");
     }
 
     pub async fn test_app_state() -> web::Data<AppState> {
