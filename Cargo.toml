@@ -17,7 +17,7 @@ schedule-parser = { path = "schedule-parser", features = ["test-utils"] }
 bcrypt = "0.17.0"
 chrono = { version = "0.4.40", features = ["serde"] }
 derive_more = { version = "2", features = ["full"] }
-diesel = { version = "2.2.8", features = ["postgres"] }
+diesel = { version = "2.2.11", features = ["postgres"] }
 diesel-derive-enum = { git = "https://github.com/Havunen/diesel-derive-enum.git", features = ["postgres"] }
 dotenvy = "0.15.7"
 env_logger = "0.11.7"
