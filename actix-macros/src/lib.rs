@@ -81,7 +81,7 @@ mod middleware_error {
 
                 fn error_response(&self) -> ::actix_web::HttpResponse<BoxBody> {
                     ::actix_web::HttpResponse::build(self.status_code())
-                        .json(crate::utility::error::MiddlewareError::new(self.clone()))
+                        .json(crate::middlewares::error::MiddlewareError::new(self.clone()))
                 }
             }
         })
