@@ -1,5 +1,4 @@
 pub mod auth;
-pub mod fcm;
 pub mod flow;
 pub mod schedule;
 mod schema;

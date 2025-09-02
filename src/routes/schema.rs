@@ -131,7 +131,7 @@ pub mod user {
     use serde::Serialize;
 
     //noinspection SpellCheckingInspection
-    /// Используется для скрытия чувствительных полей, таких как хеш пароля или FCM
+    /// Используется для скрытия чувствительных полей, таких как хеш пароля
     #[derive(Serialize, utoipa::ToSchema, ResponderJson, OkResponse)]
     #[serde(rename_all = "camelCase")]
     pub struct UserResponse {

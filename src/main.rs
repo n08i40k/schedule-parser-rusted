@@ -1,13 +1,13 @@
 use crate::middlewares::authorization::JWTAuthorization;
 use crate::middlewares::content_type::ContentTypeBootstrap;
-use crate::state::{AppState, new_app_state};
+use crate::state::{new_app_state, AppState};
 use actix_web::dev::{ServiceFactory, ServiceRequest};
 use actix_web::{App, Error, HttpServer};
 use dotenvy::dotenv;
 use log::info;
 use std::io;
-use utoipa_actix_web::AppExt;
 use utoipa_actix_web::scope::Scope;
+use utoipa_actix_web::AppExt;
 use utoipa_rapidoc::RapiDoc;
 
 mod state;
@@ -51,11 +51,6 @@ pub fn get_api_scope<
         .service(routes::schedule::teacher)
         .service(routes::schedule::teacher_names);
 
-    let fcm_scope = utoipa_actix_web::scope("/fcm")
-        .wrap(JWTAuthorization::default())
-        .service(routes::fcm::update_callback)
-        .service(routes::fcm::set_token);
-
     let flow_scope = utoipa_actix_web::scope("/flow")
         .wrap(JWTAuthorization {
             ignore: &["/telegram-auth"],
@@ -70,7 +65,6 @@ pub fn get_api_scope<
         .service(auth_scope)
         .service(users_scope)
         .service(schedule_scope)
-        .service(fcm_scope)
         .service(flow_scope)
         .service(vk_id_scope)
 }

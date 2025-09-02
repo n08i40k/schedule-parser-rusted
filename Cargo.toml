@@ -29,9 +29,6 @@ diesel-derive-enum = { git = "https://github.com/Havunen/diesel-derive-enum.git"
 # logging
 env_logger = "0.11.7"
 
-# TODO: remove support for android app and fcm?
-firebase-messaging-rs = { git = "https://github.com/i10416/firebase-messaging-rs.git" }
-
 # async
 tokio = { version = "1.44.1", features = ["macros", "rt-multi-thread"] }
 tokio-util = "0.7.16"

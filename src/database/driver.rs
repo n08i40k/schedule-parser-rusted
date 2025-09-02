@@ -4,7 +4,7 @@ pub mod users {
     use crate::database::schema::users::dsl::*;
     use crate::state::AppState;
     use actix_web::web;
-    use diesel::{ExpressionMethods, QueryResult, insert_into};
+    use diesel::{insert_into, ExpressionMethods, QueryResult};
     use diesel::{QueryDsl, RunQueryDsl};
     use diesel::{SaveChangesDsl, SelectableHelper};
     use std::ops::DerefMut;
@@ -144,21 +144,5 @@ pub mod users {
             .values(user)
             .on_conflict_do_nothing()
             .execute(state.get_database().await.deref_mut())
-    }
-}
-
-pub mod fcm {
-    use crate::database::models::{FCM, User};
-    use crate::state::AppState;
-    use actix_web::web;
-    use diesel::QueryDsl;
-    use diesel::RunQueryDsl;
-    use diesel::{BelongingToDsl, QueryResult, SelectableHelper};
-    use std::ops::DerefMut;
-
-    pub async fn from_user(state: &web::Data<AppState>, user: &User) -> QueryResult<FCM> {
-        FCM::belonging_to(&user)
-            .select(FCM::as_select())
-            .get_result(state.get_database().await.deref_mut())
     }
 }

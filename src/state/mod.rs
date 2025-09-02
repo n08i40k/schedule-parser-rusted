@@ -1,11 +1,8 @@
 mod env;
-mod fcm_client;
 
 pub use crate::state::env::AppEnv;
-use crate::state::fcm_client::FCMClientData;
 use actix_web::web;
 use diesel::{Connection, PgConnection};
-use firebase_messaging_rs::FCMClient;
 use providers::base::{ScheduleProvider, ScheduleSnapshot};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -18,7 +15,6 @@ pub struct AppState {
     database: Mutex<PgConnection>,
     providers: HashMap<String, Arc<dyn ScheduleProvider>>,
     env: AppEnv,
-    fcm_client: Option<Mutex<FCMClient>>,
 }
 
 impl AppState {
@@ -62,7 +58,6 @@ impl AppState {
             ),
             env,
             providers,
-            fcm_client: FCMClientData::new().await,
         };
 
         if this.env.schedule.auto_update {
@@ -91,13 +86,6 @@ impl AppState {
 
     pub fn get_env(&self) -> &AppEnv {
         &self.env
-    }
-
-    pub async fn get_fcm_client(&'_ self) -> Option<MutexGuard<'_, FCMClient>> {
-        match &self.fcm_client {
-            Some(client) => Some(client.lock().await),
-            None => None,
-        }
     }
 }
 

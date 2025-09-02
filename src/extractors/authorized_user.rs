@@ -1,13 +1,13 @@
 use crate::database::driver;
-use crate::database::models::{User, FCM};
-use crate::extractors::base::{AsyncExtractor, FromRequestAsync};
+use crate::database::models::User;
+use crate::extractors::base::FromRequestAsync;
 use crate::state::AppState;
 use crate::utility::jwt;
 use actix_macros::MiddlewareError;
 use actix_web::body::BoxBody;
 use actix_web::dev::Payload;
 use actix_web::http::header;
-use actix_web::{web, FromRequest, HttpRequest};
+use actix_web::{web, HttpRequest};
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -93,50 +93,5 @@ impl FromRequestAsync for User {
         driver::users::get(app_state, &user_id)
             .await
             .map_err(|_| Error::NoUser.into())
-    }
-}
-
-pub struct UserExtractor<const FCM: bool> {
-    user: User,
-
-    fcm: Option<FCM>,
-}
-
-impl<const FCM: bool> UserExtractor<{ FCM }> {
-    pub fn user(&self) -> &User {
-        &self.user
-    }
-
-    pub fn fcm(&self) -> &Option<FCM> {
-        if !FCM {
-            panic!("FCM marked as not required, but it has been requested")
-        }
-
-        &self.fcm
-    }
-}
-
-/// Extractor of user and additional parameters from request with Bearer token.
-impl<const FCM: bool> FromRequestAsync for UserExtractor<{ FCM }> {
-    type Error = actix_web::Error;
-
-    async fn from_request_async(
-        req: &HttpRequest,
-        payload: &mut Payload,
-    ) -> Result<Self, Self::Error> {
-        let user = AsyncExtractor::<User>::from_request(req, payload)
-            .await?
-            .into_inner();
-
-        let app_state = req.app_data::<web::Data<AppState>>().unwrap();
-
-        Ok(Self {
-            fcm: if FCM {
-                driver::fcm::from_user(&app_state, &user).await.ok()
-            } else {
-                None
-            },
-            user,
-        })
     }
 }
