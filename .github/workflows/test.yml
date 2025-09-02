@@ -18,10 +18,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
       - name: Build
         run: cargo build
-      - name: Create .env.test
-        run: touch .env.test
+
       - name: Run tests
         run: cargo test
         env:
