@@ -40,7 +40,6 @@ jobs:
 
       - name: Test
         run: |
-          touch .env.test
           cargo test --verbose
         env:
           DATABASE_URL: ${{ env.TEST_DB }}
