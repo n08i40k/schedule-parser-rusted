@@ -31,8 +31,9 @@ pub async fn group(user: AsyncExtractor<User>, app_state: web::Data<AppState>) -
         None => Err(ErrorCode::SignUpNotCompleted),
 
         Some(group) => match app_state
-            .get_schedule_snapshot()
+            .get_schedule_snapshot("eng_polytechnic")
             .await
+            .unwrap()
             .data
             .groups
             .get(group)

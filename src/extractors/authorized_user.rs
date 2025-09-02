@@ -1,5 +1,5 @@
 use crate::database::driver;
-use crate::database::models::{FCM, User};
+use crate::database::models::{User, FCM};
 use crate::extractors::base::{AsyncExtractor, FromRequestAsync};
 use crate::state::AppState;
 use crate::utility::jwt;
@@ -7,7 +7,7 @@ use actix_macros::MiddlewareError;
 use actix_web::body::BoxBody;
 use actix_web::dev::Payload;
 use actix_web::http::header;
-use actix_web::{FromRequest, HttpRequest, web};
+use actix_web::{web, FromRequest, HttpRequest};
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;

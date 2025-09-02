@@ -14,8 +14,6 @@ mod state;
 
 mod database;
 
-mod xls_downloader;
-
 mod extractors;
 mod middlewares;
 mod routes;

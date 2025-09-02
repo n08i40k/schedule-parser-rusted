@@ -1,0 +1,32 @@
+[package]
+name = "provider-engels-polytechnic"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+test = []
+
+[dependencies]
+base = { path = "../base" }
+
+tokio = { version = "1.47.1", features = ["sync", "macros", "time"] }
+tokio-util = "0.7.16"
+
+chrono = { version = "0.4.41", features = ["serde"] }
+
+serde = { version = "1.0.219", features = ["derive"] }
+
+derive_more = { version = "2.0.1", features = ["error", "display"] }
+
+utoipa = { version = "5.4.0", features = ["macros", "chrono"] }
+
+calamine = { git = "https://github.com/prophittcorey/calamine.git", branch = "fix/zip-3.0" }
+async-trait = "0.1.89"
+
+reqwest = "0.12.23"
+ua_generator = "0.5.22"
+regex = "1.11.1"
+strsim = "0.11.1"
+log = "0.4.27"
+sentry = "0.42.0"
+

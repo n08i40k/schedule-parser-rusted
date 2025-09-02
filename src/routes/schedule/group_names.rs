@@ -6,8 +6,9 @@ use actix_web::{get, web};
 #[get("/group-names")]
 pub async fn group_names(app_state: web::Data<AppState>) -> Response {
     let mut names: Vec<String> = app_state
-        .get_schedule_snapshot()
+        .get_schedule_snapshot("eng_polytechnic")
         .await
+        .unwrap()
         .data
         .groups
         .keys()

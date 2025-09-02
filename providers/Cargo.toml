@@ -1,0 +1,12 @@
+[package]
+name = "providers"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+test = ["provider-engels-polytechnic/test"]
+
+[dependencies]
+base = { path = "base" }
+
+provider-engels-polytechnic = { path = "provider-engels-polytechnic" }

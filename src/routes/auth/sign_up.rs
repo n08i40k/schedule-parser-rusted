@@ -18,8 +18,9 @@ async fn sign_up_combined(
     }
 
     if !app_state
-        .get_schedule_snapshot()
+        .get_schedule_snapshot("eng_polytechnic")
         .await
+        .unwrap()
         .data
         .groups
         .contains_key(&data.group)

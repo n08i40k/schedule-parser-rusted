@@ -1,12 +1,12 @@
-use crate::LessonParseResult::{Lessons, Street};
-use crate::schema::LessonType::Break;
-use crate::schema::internal::{BoundariesCellInfo, DayCellInfo, GroupCellInfo};
-use crate::schema::{
-    Day, ErrorCell, ErrorCellPos, Lesson, LessonBoundaries, LessonSubGroup, LessonType, ParseError,
-    ParseResult, ScheduleEntry,
+use crate::or_continue;
+use crate::parser::error::{ErrorCell, ErrorCellPos};
+use crate::parser::worksheet::WorkSheet;
+use crate::parser::LessonParseResult::{Lessons, Street};
+use base::LessonType::Break;
+use base::{
+    Day, Lesson, LessonBoundaries, LessonSubGroup, LessonType, ParsedSchedule, ScheduleEntry,
 };
-use crate::worksheet::WorkSheet;
-use calamine::{Reader, Xls, open_workbook_from_rs};
+use calamine::{open_workbook_from_rs, Reader, Xls};
 use chrono::{DateTime, Duration, NaiveDate, NaiveTime, Utc};
 use regex::Regex;
 use std::collections::HashMap;
@@ -14,18 +14,128 @@ use std::io::Cursor;
 use std::sync::LazyLock;
 
 mod macros;
-pub mod schema;
 mod worksheet;
 
+pub mod error {
+    use derive_more::{Display, Error};
+    use serde::{Serialize, Serializer};
+    use std::sync::Arc;
+    use utoipa::ToSchema;
+
+    #[derive(Clone, Debug, Display, Error, ToSchema)]
+    #[display("row {row}, column {column}")]
+    pub struct ErrorCellPos {
+        pub row: u32,
+        pub column: u32,
+    }
+
+    #[derive(Clone, Debug, Display, Error, ToSchema)]
+    #[display("'{data}' at {pos}")]
+    pub struct ErrorCell {
+        pub pos: ErrorCellPos,
+        pub data: String,
+    }
+
+    impl ErrorCell {
+        pub fn new(row: u32, column: u32, data: String) -> Self {
+            Self {
+                pos: ErrorCellPos { row, column },
+                data,
+            }
+        }
+    }
+
+    #[derive(Clone, Debug, Display, Error, ToSchema)]
+    pub enum Error {
+        /// Errors related to reading XLS file.
+        #[display("{_0:?}: Failed to read XLS file.")]
+        #[schema(value_type = String)]
+        BadXLS(Arc<calamine::XlsError>),
+
+        /// Not a single sheet was found.
+        #[display("No work sheets found.")]
+        NoWorkSheets,
+
+        /// There are no data on the boundaries of the sheet.
+        #[display("There is no data on work sheet boundaries.")]
+        UnknownWorkSheetRange,
+
+        /// Failed to read the beginning and end of the lesson from the cell
+        #[display("Failed to read lesson start and end from {_0}.")]
+        LessonBoundaries(ErrorCell),
+
+        /// Not found the beginning and the end corresponding to the lesson.
+        #[display("No start and end times matching the lesson (at {_0}) was found.")]
+        LessonTimeNotFound(ErrorCellPos),
+    }
+
+    impl Serialize for Error {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            match self {
+                Error::BadXLS(_) => serializer.serialize_str("BAD_XLS"),
+                Error::NoWorkSheets => serializer.serialize_str("NO_WORK_SHEETS"),
+                Error::UnknownWorkSheetRange => {
+                    serializer.serialize_str("UNKNOWN_WORK_SHEET_RANGE")
+                }
+                Error::LessonBoundaries(_) => serializer.serialize_str("GLOBAL_TIME"),
+                Error::LessonTimeNotFound(_) => serializer.serialize_str("LESSON_TIME_NOT_FOUND"),
+            }
+        }
+    }
+}
+
+/// Data cell storing the group name.
+pub struct GroupCellInfo {
+    /// Column index.
+    pub column: u32,
+
+    /// Text in the cell.
+    pub name: String,
+}
+
+/// Data cell storing the line.
+pub struct DayCellInfo {
+    /// Line index.
+    pub row: u32,
+
+    /// Column index.
+    pub column: u32,
+
+    /// Day name.
+    pub name: String,
+
+    /// Date of the day.
+    pub date: DateTime<Utc>,
+}
+
+/// Data on the time of lessons from the second column of the schedule.
+pub struct BoundariesCellInfo {
+    /// Temporary segment of the lesson.
+    pub time_range: LessonBoundaries,
+
+    /// Type of lesson.
+    pub lesson_type: LessonType,
+
+    /// The lesson index.
+    pub default_index: Option<u32>,
+
+    /// The frame of the cell.
+    pub xls_range: ((u32, u32), (u32, u32)),
+}
 /// Obtaining a "skeleton" schedule from the working sheet.
 fn parse_skeleton(
     worksheet: &WorkSheet,
-) -> Result<(Vec<DayCellInfo>, Vec<GroupCellInfo>), ParseError> {
+) -> Result<(Vec<DayCellInfo>, Vec<GroupCellInfo>), crate::parser::error::Error> {
     let mut groups: Vec<GroupCellInfo> = Vec::new();
     let mut days: Vec<(u32, String, Option<DateTime<Utc>>)> = Vec::new();
 
-    let worksheet_start = worksheet.start().ok_or(ParseError::UnknownWorkSheetRange)?;
-    let worksheet_end = worksheet.end().ok_or(ParseError::UnknownWorkSheetRange)?;
+    let worksheet_start = worksheet
+        .start()
+        .ok_or(error::Error::UnknownWorkSheetRange)?;
+    let worksheet_end = worksheet.end().ok_or(error::Error::UnknownWorkSheetRange)?;
 
     let mut row = worksheet_start.0;
 
@@ -42,7 +152,8 @@ fn parse_skeleton(
             for column in (worksheet_start.1 + 2)..=worksheet_end.1 {
                 groups.push(GroupCellInfo {
                     column,
-                    name: or_continue!(worksheet.get_string_from_cell(row, column)),
+                    name: or_continue!(worksheet.get_string_from_cell(row, column))
+                        .replace(" ", ""),
                 });
             }
 
@@ -152,7 +263,7 @@ fn parse_lesson(
     day_boundaries: &Vec<BoundariesCellInfo>,
     lesson_boundaries: &BoundariesCellInfo,
     group_column: u32,
-) -> Result<LessonParseResult, ParseError> {
+) -> Result<LessonParseResult, crate::parser::error::Error> {
     let row = lesson_boundaries.xls_range.0.0;
 
     let name = {
@@ -179,13 +290,12 @@ fn parse_lesson(
             .filter(|time| time.xls_range.1.0 == cell_range.1.0)
             .collect::<Vec<&BoundariesCellInfo>>();
 
-        let end_time =
-            end_time_arr
-                .first()
-                .ok_or(ParseError::LessonTimeNotFound(ErrorCellPos {
-                    row,
-                    column: group_column,
-                }))?;
+        let end_time = end_time_arr
+            .first()
+            .ok_or(error::Error::LessonTimeNotFound(ErrorCellPos {
+                row,
+                column: group_column,
+            }))?;
 
         let range: Option<[u8; 2]> = if lesson_boundaries.default_index != None {
             let default = lesson_boundaries.default_index.unwrap() as u8;
@@ -310,7 +420,8 @@ fn parse_cabinets(worksheet: &WorkSheet, row_range: (u32, u32), column: u32) -> 
 /// Getting the "pure" name of the lesson and list of teachers from the text of the lesson cell.
 fn parse_name_and_subgroups(
     text: &String,
-) -> Result<(String, Vec<Option<LessonSubGroup>>, Option<LessonType>), ParseError> {
+) -> Result<(String, Vec<Option<LessonSubGroup>>, Option<LessonType>), crate::parser::error::Error>
+{
     // Части названия пары:
     // 1. Само название.
     // 2. Список преподавателей и подгрупп.
@@ -486,7 +597,7 @@ fn parse_day_boundaries(
     date: DateTime<Utc>,
     row_range: (u32, u32),
     column: u32,
-) -> Result<Vec<BoundariesCellInfo>, ParseError> {
+) -> Result<Vec<BoundariesCellInfo>, crate::parser::error::Error> {
     let mut day_times: Vec<BoundariesCellInfo> = Vec::new();
 
     for row in row_range.0..row_range.1 {
@@ -497,7 +608,7 @@ fn parse_day_boundaries(
         };
 
         let lesson_time = parse_lesson_boundaries_cell(&time_cell, date.clone()).ok_or(
-            ParseError::LessonBoundaries(ErrorCell::new(row, column, time_cell.clone())),
+            error::Error::LessonBoundaries(ErrorCell::new(row, column, time_cell.clone())),
         )?;
 
         // type
@@ -542,7 +653,7 @@ fn parse_day_boundaries(
 fn parse_week_boundaries(
     worksheet: &WorkSheet,
     week_markup: &Vec<DayCellInfo>,
-) -> Result<Vec<Vec<BoundariesCellInfo>>, ParseError> {
+) -> Result<Vec<Vec<BoundariesCellInfo>>, crate::parser::error::Error> {
     let mut result: Vec<Vec<BoundariesCellInfo>> = Vec::new();
 
     let worksheet_end_row = worksheet.end().unwrap().0;
@@ -662,7 +773,7 @@ fn convert_groups_to_teachers(
 ///
 /// * `buffer`: XLS data containing schedule.
 ///
-/// returns: Result<ParseResult, ParseError>
+/// returns: Result<ParseResult, crate::parser::error::Error>
 ///
 /// # Examples
 ///
@@ -676,21 +787,21 @@ fn convert_groups_to_teachers(
 /// assert_ne!(result.as_ref().unwrap().groups.len(), 0);
 /// assert_ne!(result.as_ref().unwrap().teachers.len(), 0);
 /// ```
-pub fn parse_xls(buffer: &Vec<u8>) -> Result<ParseResult, ParseError> {
+pub fn parse_xls(buffer: &Vec<u8>) -> Result<ParsedSchedule, crate::parser::error::Error> {
     let cursor = Cursor::new(&buffer);
     let mut workbook: Xls<_> =
-        open_workbook_from_rs(cursor).map_err(|e| ParseError::BadXLS(std::sync::Arc::new(e)))?;
+        open_workbook_from_rs(cursor).map_err(|e| error::Error::BadXLS(std::sync::Arc::new(e)))?;
 
     let worksheet = {
         let (worksheet_name, worksheet) = workbook
             .worksheets()
             .first()
-            .ok_or(ParseError::NoWorkSheets)?
+            .ok_or(error::Error::NoWorkSheets)?
             .clone();
 
         let worksheet_merges = workbook
             .worksheet_merge_cells(&*worksheet_name)
-            .ok_or(ParseError::NoWorkSheets)?;
+            .ok_or(error::Error::NoWorkSheets)?;
 
         WorkSheet {
             data: worksheet,
@@ -740,18 +851,19 @@ pub fn parse_xls(buffer: &Vec<u8>) -> Result<ParseResult, ParseError> {
         groups.insert(group.name.clone(), group);
     }
 
-    Ok(ParseResult {
+    Ok(ParsedSchedule {
         teachers: convert_groups_to_teachers(&groups),
         groups,
     })
 }
 
-#[cfg(any(test, feature = "test-utils"))]
+#[cfg(any(test, feature = "test"))]
 pub mod test_utils {
     use super::*;
+    use base::ParsedSchedule;
 
-    pub fn test_result() -> Result<ParseResult, ParseError> {
-        parse_xls(&include_bytes!("../../schedule.xls").to_vec())
+    pub fn test_result() -> Result<ParsedSchedule, crate::parser::error::Error> {
+        parse_xls(&include_bytes!("../../../../test-data/engels-polytechnic.xls").to_vec())
     }
 }
 

@@ -1,7 +1,7 @@
-use crate::state::{AppState, ScheduleSnapshot};
+use crate::state::AppState;
 use actix_macros::{OkResponse, ResponderJson};
 use actix_web::web;
-use schedule_parser::schema::ScheduleEntry;
+use providers::base::{ScheduleEntry, ScheduleSnapshot};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -32,7 +32,12 @@ impl From<ScheduleEntry> for ScheduleEntryResponse {
 
 impl ScheduleView {
     pub async fn from(app_state: &web::Data<AppState>) -> Self {
-        let schedule = app_state.get_schedule_snapshot().await.clone();
+        let schedule = app_state
+            .get_schedule_snapshot("eng_polytechnic")
+            .await
+            .unwrap()
+            .deref()
+            .clone();
 
         Self {
             url: schedule.url,
@@ -60,7 +65,13 @@ pub struct CacheStatus {
 
 impl CacheStatus {
     pub async fn from(value: &web::Data<AppState>) -> Self {
-        From::<&ScheduleSnapshot>::from(value.get_schedule_snapshot().await.deref())
+        From::<&ScheduleSnapshot>::from(
+            value
+                .get_schedule_snapshot("eng_polytechnic")
+                .await
+                .unwrap()
+                .deref(),
+        )
     }
 }
 

@@ -2,7 +2,7 @@ use self::schema::*;
 use crate::AppState;
 use crate::routes::schema::ResponseError;
 use actix_web::{get, web};
-use schedule_parser::schema::ScheduleEntry;
+use providers::base::ScheduleEntry;
 
 #[utoipa::path(responses(
     (status = OK, body = ScheduleEntry),
@@ -18,8 +18,9 @@ use schedule_parser::schema::ScheduleEntry;
 #[get("/teacher/{name}")]
 pub async fn teacher(name: web::Path<String>, app_state: web::Data<AppState>) -> ServiceResponse {
     match app_state
-        .get_schedule_snapshot()
+        .get_schedule_snapshot("eng_polytechnic")
         .await
+        .unwrap()
         .data
         .teachers
         .get(&name.into_inner())

@@ -1,5 +1,5 @@
 [workspace]
-members = ["actix-macros", "actix-test", "schedule-parser"]
+members = ["actix-macros", "actix-test", "providers"]
 
 [package]
 name = "schedule-parser-rusted"
@@ -11,7 +11,7 @@ publish = false
 debug = true
 
 [dependencies]
-schedule-parser = { path = "schedule-parser", features = ["test-utils"] }
+providers = { path = "providers" }
 actix-macros = { path = "actix-macros" }
 
 # serve api
@@ -34,6 +34,7 @@ firebase-messaging-rs = { git = "https://github.com/i10416/firebase-messaging-rs
 
 # async
 tokio = { version = "1.44.1", features = ["macros", "rt-multi-thread"] }
+tokio-util = "0.7.16"
 futures-util = "0.3.31"
 
 # authorization
@@ -45,12 +46,11 @@ objectid = "0.2.0"
 
 # schedule downloader
 reqwest = { version = "0.12.15", features = ["json"] }
-ua_generator = "0.5"
 mime = "0.3.17"
 
 # error handling
-sentry = "0.39"
-sentry-actix = "0.39"
+sentry = "0.42.0"
+sentry-actix = "0.42.0"
 
 # [de]serializing
 serde = { version = "1.0.219", features = ["derive"] }
@@ -74,4 +74,5 @@ percent-encoding = "2.3"
 ed25519-dalek = "2"
 
 [dev-dependencies]
+providers = { path = "providers", features = ["test"] }
 actix-test = { path = "actix-test" }

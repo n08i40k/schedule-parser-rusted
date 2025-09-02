@@ -40,8 +40,9 @@ pub async fn telegram_complete(
 
     // проверка на существование группы
     if !app_state
-        .get_schedule_snapshot()
+        .get_schedule_snapshot("eng_polytechnic")
         .await
+        .unwrap()
         .data
         .groups
         .contains_key(&data.group)

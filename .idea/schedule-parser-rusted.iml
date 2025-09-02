@@ -8,6 +8,9 @@
       <sourceFolder url="file://$MODULE_DIR$/actix-test/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/schedule-parser/benches" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/schedule-parser/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/providers/base/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/providers/provider-engels-polytechnic/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/providers/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/actix-macros/target" />
       <excludeFolder url="file://$MODULE_DIR$/actix-test/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />

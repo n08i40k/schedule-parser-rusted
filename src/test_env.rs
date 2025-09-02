@@ -1,10 +1,8 @@
 #[cfg(test)]
 pub(crate) mod tests {
-    use crate::state::{AppState, ScheduleSnapshot, new_app_state};
+    use crate::state::{new_app_state, AppState};
     use actix_web::web;
     use log::info;
-    use schedule_parser::test_utils::test_result;
-    use std::default::Default;
     use tokio::sync::OnceCell;
 
     pub fn test_env() {
@@ -17,19 +15,12 @@ pub(crate) mod tests {
     pub async fn test_app_state() -> web::Data<AppState> {
         let state = new_app_state().await.unwrap();
 
-        state.get_schedule().await.snapshot.write(ScheduleSnapshot {
-            fetched_at: Default::default(),
-            updated_at: Default::default(),
-            url: "".to_string(),
-            data: test_result().unwrap(),
-        });
-
         state.clone()
     }
 
     pub async fn static_app_state() -> web::Data<AppState> {
         static STATE: OnceCell<web::Data<AppState>> = OnceCell::const_new();
-
+        
         STATE.get_or_init(|| test_app_state()).await.clone()
     }
 }
