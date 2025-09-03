@@ -22,10 +22,6 @@ pub async fn telegram_auth(
 ) -> ServiceResponse {
     let init_data = WebAppInitDataMap::from_str(data_json.into_inner().init_data);
 
-    // for (key, value) in &init_data.data_map {
-    //     println!("key: {} | value: {}", key, value);
-    // }
-
     {
         let env = &app_state.get_env().telegram;
 
@@ -114,8 +110,8 @@ mod schema {
     #[serde(rename_all = "camelCase")]
     #[schema(as = Flow::TelegramAuth::Response)]
     pub struct Response {
-        #[serde(skip)]
-        #[schema(ignore)]
+        // #[serde(skip)]       // TODO: я пока не придумал как не отдавать сырой токен в ответе
+        // #[schema(ignore)]
         access_token: String,
 
         pub completed: bool,
