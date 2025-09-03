@@ -3,7 +3,7 @@ members = ["actix-macros", "actix-test", "providers"]
 
 [package]
 name = "schedule-parser-rusted"
-version = "1.1.0"
+version = "1.1.1"
 edition = "2024"
 publish = false
 
@@ -15,34 +15,34 @@ providers = { path = "providers" }
 actix-macros = { path = "actix-macros" }
 
 # serve api
-actix-web = "4"
+actix-web = "4.11.0"
 
 # basic
-chrono = { version = "0.4.40", features = ["serde"] }
-derive_more = { version = "2", features = ["full"] }
+chrono = { version = "0.4.41", features = ["serde"] }
+derive_more = { version = "2.0.1", features = ["full"] }
 dotenvy = "0.15.7"
 
 # sql
-diesel = { version = "2.2.8", features = ["postgres"] }
+diesel = { version = "2.2.12", features = ["postgres"] }
 diesel-derive-enum = { git = "https://github.com/Havunen/diesel-derive-enum.git", features = ["postgres"] }
 
 # logging
-env_logger = "0.11.7"
+env_logger = "0.11.8"
 
 # async
-tokio = { version = "1.44.1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.47.1", features = ["macros", "rt-multi-thread"] }
 tokio-util = "0.7.16"
 futures-util = "0.3.31"
 
 # authorization
-bcrypt = "0.17.0"
+bcrypt = "0.17.1"
 jsonwebtoken = { version = "9.3.1", features = ["use_pem"] }
 
 # creating users
 objectid = "0.2.0"
 
 # schedule downloader
-reqwest = { version = "0.12.15", features = ["json"] }
+reqwest = { version = "0.12.23", features = ["json"] }
 mime = "0.3.17"
 
 # error handling
@@ -51,24 +51,24 @@ sentry-actix = "0.42.0"
 
 # [de]serializing
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
-serde_with = "3.12.0"
+serde_json = "1.0.143"
+serde_with = "3.14.0"
 
-sha1 = "0.11.0-rc.0"
+sha1 = "0.11.0-rc.2"
 
 # documentation
-utoipa = { version = "5", features = ["actix_extras", "chrono"] }
-utoipa-rapidoc = { version = "6", features = ["actix-web"] }
-utoipa-actix-web = "0.1"
+utoipa = { version = "5.4.0", features = ["actix_extras", "chrono"] }
+utoipa-rapidoc = { version = "6.0.0", features = ["actix-web"] }
+utoipa-actix-web = "0.1.2"
 
-uuid = { version = "1", features = ["v4"] }
+uuid = { version = "1.18.1", features = ["v4"] }
 hex-literal = "1"
-log = "0.4"
+log = "0.4.27"
 
 # telegram webdata deciding and verify
-base64 = "0.22"
-percent-encoding = "2.3"
-ed25519-dalek = "2"
+base64 = "0.22.1"
+percent-encoding = "2.3.2"
+ed25519-dalek = "3.0.0-pre.0"
 
 [dev-dependencies]
 providers = { path = "providers", features = ["test"] }
