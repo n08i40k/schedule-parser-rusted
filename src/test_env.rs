@@ -26,7 +26,7 @@ pub(crate) mod tests {
 
         STATE
             .get_or_init(async || -> web::Data<AppState> {
-                #[cfg(all(test, tokio_unstable))]
+                #[cfg(feature = "trace")]
                 console_subscriber::init();
 
                 new_app_state(None).await.unwrap()

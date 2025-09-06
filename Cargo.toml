@@ -10,6 +10,9 @@ publish = false
 [profile.release]
 debug = true
 
+[features]
+trace = ["tracing", "console-subscriber"]
+
 [dependencies]
 providers = { path = "providers" }
 actix-macros = { path = "actix-macros" }
@@ -69,9 +72,10 @@ base64 = "0.22.1"
 percent-encoding = "2.3.2"
 ed25519-dalek = "3.0.0-pre.0"
 
+# development tracing
+console-subscriber = { version = "0.4.1", optional = true }
+tracing = { version = "0.1.41", optional = true }
+
 [dev-dependencies]
 providers = { path = "providers", features = ["test"] }
 actix-test = { path = "actix-test" }
-
-console-subscriber = "0.4.1"
-tracing = "0.1.41"
