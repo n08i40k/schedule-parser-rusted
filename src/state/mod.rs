@@ -2,25 +2,24 @@ mod env;
 
 pub use crate::state::env::AppEnv;
 use actix_web::web;
-use diesel::{Connection, PgConnection};
+use database::sea_orm::{Database, DatabaseConnection};
 use providers::base::{ScheduleProvider, ScheduleSnapshot};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{Mutex, MutexGuard};
 use tokio_util::sync::CancellationToken;
 
 /// Common data provided to endpoints.
 pub struct AppState {
     cancel_token: CancellationToken,
-    database: Mutex<PgConnection>,
+    database: DatabaseConnection,
     providers: HashMap<String, Arc<dyn ScheduleProvider>>,
     env: AppEnv,
 }
 
 impl AppState {
-    pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-
+    pub async fn new(
+        database: Option<DatabaseConnection>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let env = AppEnv::default();
         let providers: HashMap<String, Arc<dyn ScheduleProvider>> = HashMap::from([(
             "eng_polytechnic".to_string(),
@@ -52,10 +51,14 @@ impl AppState {
 
         let this = Self {
             cancel_token: CancellationToken::new(),
-            database: Mutex::new(
-                PgConnection::establish(&database_url)
-                    .unwrap_or_else(|_| panic!("Error connecting to {}", database_url)),
-            ),
+            database: if let Some(database) = database {
+                database
+            } else {
+                let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+                Database::connect(&database_url)
+                    .await
+                    .unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
+            },
             env,
             providers,
         };
@@ -80,8 +83,8 @@ impl AppState {
         None
     }
 
-    pub async fn get_database(&'_ self) -> MutexGuard<'_, PgConnection> {
-        self.database.lock().await
+    pub fn get_database(&'_ self) -> &DatabaseConnection {
+        &self.database
     }
 
     pub fn get_env(&self) -> &AppEnv {
@@ -90,6 +93,6 @@ impl AppState {
 }
 
 /// Create a new object web::Data<AppState>.
-pub async fn new_app_state() -> Result<web::Data<AppState>, Box<dyn std::error::Error>> {
-    Ok(web::Data::new(AppState::new().await?))
+pub async fn new_app_state(database: Option<DatabaseConnection>) -> Result<web::Data<AppState>, Box<dyn std::error::Error>> {
+    Ok(web::Data::new(AppState::new(database).await?))
 }

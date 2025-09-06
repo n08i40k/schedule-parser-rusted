@@ -1,10 +1,11 @@
 use self::schema::*;
-use crate::database::driver;
-use crate::database::driver::users::UserSave;
-use crate::database::models::User;
 use crate::extractors::base::AsyncExtractor;
 use crate::state::AppState;
 use actix_web::{post, web};
+use database::entity::User;
+use database::query::Query;
+use database::sea_orm::{ActiveModelTrait, IntoActiveModel, Set};
+use std::ops::Deref;
 
 #[utoipa::path(responses((status = OK)))]
 #[post("/change-username")]
@@ -13,21 +14,24 @@ pub async fn change_username(
     user: AsyncExtractor<User>,
     data: web::Json<Request>,
 ) -> ServiceResponse {
-    let mut user = user.into_inner();
+    let user = user.into_inner();
 
     if user.username == data.username {
         return Ok(()).into();
     }
 
-    if driver::users::get_by_username(&app_state, &data.username)
+    let db = app_state.get_database();
+
+    if Query::is_user_exists_by_username(db, &data.username)
         .await
-        .is_ok()
+        .unwrap()
     {
         return Err(ErrorCode::AlreadyExists).into();
     }
 
-    user.username = data.into_inner().username;
-    user.save(&app_state).await.unwrap();
+    let mut active_user = user.into_active_model();
+    active_user.username = Set(data.into_inner().username);
+    active_user.update(db).await.unwrap();
 
     Ok(()).into()
 }

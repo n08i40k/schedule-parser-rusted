@@ -12,8 +12,6 @@ use utoipa_rapidoc::RapiDoc;
 
 mod state;
 
-mod database;
-
 mod extractors;
 mod middlewares;
 mod routes;
@@ -72,7 +70,7 @@ pub fn get_api_scope<
 async fn async_main() -> io::Result<()> {
     info!("Запуск сервера...");
 
-    let app_state = new_app_state().await.unwrap();
+    let app_state = new_app_state(None).await.unwrap();
 
     HttpServer::new(move || {
         let (app, api) = App::new()

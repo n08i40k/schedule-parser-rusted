@@ -1,5 +1,3 @@
-use crate::database::driver;
-use crate::database::models::User;
 use crate::extractors::base::FromRequestAsync;
 use crate::state::AppState;
 use crate::utility::jwt;
@@ -8,9 +6,12 @@ use actix_web::body::BoxBody;
 use actix_web::dev::Payload;
 use actix_web::http::header;
 use actix_web::{web, HttpRequest};
+use database::entity::User;
+use database::query::Query;
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
+use std::ops::Deref;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Display, MiddlewareError)]
 #[status_code = "actix_web::http::StatusCode::UNAUTHORIZED"]
@@ -88,10 +89,20 @@ impl FromRequestAsync for User {
         let user_id = jwt::verify_and_decode(&access_token)
             .map_err(|_| Error::InvalidAccessToken.into_err())?;
 
-        let app_state = req.app_data::<web::Data<AppState>>().unwrap();
+        let db = req
+            .app_data::<web::Data<AppState>>()
+            .unwrap()
+            .get_database();
 
-        driver::users::get(app_state, &user_id)
+        Query::find_user_by_id(db, &user_id)
             .await
             .map_err(|_| Error::NoUser.into())
+            .and_then(|user| {
+                if let Some(user) = user {
+                    Ok(user)
+                } else {
+                    Err(actix_web::Error::from(Error::NoUser))
+                }
+            })
     }
 }

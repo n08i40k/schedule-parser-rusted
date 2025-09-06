@@ -1,10 +1,10 @@
 use self::schema::*;
 use crate::AppState;
-use crate::database::models::User;
 use crate::extractors::base::AsyncExtractor;
 use crate::routes::schedule::schema::ScheduleEntryResponse;
 use crate::routes::schema::ResponseError;
 use actix_web::{get, web};
+use database::entity::User;
 
 #[utoipa::path(responses(
     (status = OK, body = ScheduleEntryResponse),

@@ -1,25 +1,28 @@
 use self::schema::*;
-use crate::database::driver;
-use crate::database::driver::users::UserSave;
 use crate::routes::auth::shared::parse_vk_id;
 use crate::routes::auth::sign_in::schema::SignInData::{Default, VkOAuth};
-use crate::routes::schema::ResponseError;
 use crate::routes::schema::user::UserResponse;
-use crate::{AppState, utility};
+use crate::routes::schema::ResponseError;
+use crate::{utility, AppState};
 use actix_web::{post, web};
+use database::query::Query;
 use web::Json;
 
 async fn sign_in_combined(
     data: SignInData,
     app_state: &web::Data<AppState>,
 ) -> Result<UserResponse, ErrorCode> {
+    let db = app_state.get_database();
+
     let user = match &data {
-        Default(data) => driver::users::get_by_username(&app_state, &data.username).await,
-        VkOAuth(id) => driver::users::get_by_vk_id(&app_state, *id).await,
-    };
+        Default(data) => Query::find_user_by_username(db, &data.username).await,
+        VkOAuth(id) => Query::find_user_by_vk_id(db, *id).await,
+    }
+    .ok()
+    .flatten();
 
     match user {
-        Ok(mut user) => {
+        Some(user) => {
             if let Default(data) = data {
                 if user.password.is_none() {
                     return Err(ErrorCode::IncorrectCredentials);
@@ -37,14 +40,11 @@ async fn sign_in_combined(
                 }
             }
 
-            user.access_token = Some(utility::jwt::encode(&user.id));
-
-            user.save(&app_state).await.expect("Failed to update user");
-
-            Ok(user.into())
+            let access_token = utility::jwt::encode(&user.id);
+            Ok(UserResponse::from_user_with_token(user, access_token))
         }
 
-        Err(_) => Err(ErrorCode::IncorrectCredentials),
+        None => Err(ErrorCode::IncorrectCredentials),
     }
 }
 
@@ -139,16 +139,16 @@ mod schema {
 #[cfg(test)]
 mod tests {
     use super::schema::*;
-    use crate::database::driver;
-    use crate::database::models::{User, UserRole};
     use crate::routes::auth::sign_in::sign_in;
     use crate::test_env::tests::{static_app_state, test_app_state, test_env};
-    use crate::utility;
     use actix_test::test_app;
     use actix_web::dev::ServiceResponse;
     use actix_web::http::Method;
     use actix_web::http::StatusCode;
     use actix_web::test;
+    use database::entity::sea_orm_active_enums::UserRole;
+    use database::entity::ActiveUser;
+    use database::sea_orm::{ActiveModelTrait, Set};
     use sha1::{Digest, Sha1};
     use std::fmt::Write;
 
@@ -182,22 +182,24 @@ mod tests {
         test_env();
 
         let app_state = static_app_state().await;
-        driver::users::insert_or_ignore(
-            &app_state,
-            &User {
-                id: id.clone(),
-                username,
-                password: Some(bcrypt::hash("example".to_string(), bcrypt::DEFAULT_COST).unwrap()),
-                vk_id: None,
-                telegram_id: None,
-                access_token: Some(utility::jwt::encode(&id)),
-                group: Some("ИС-214/23".to_string()),
-                role: UserRole::Student,
-                android_version: None,
-            },
-        )
-        .await
-        .unwrap();
+
+        let active_user = ActiveUser {
+            id: Set(id.clone()),
+            username: Set(username),
+            password: Set(Some(
+                bcrypt::hash("example".to_string(), bcrypt::DEFAULT_COST).unwrap(),
+            )),
+            vk_id: Set(None),
+            telegram_id: Set(None),
+            group: Set(Some("ИС-214/23".to_string())),
+            role: Set(UserRole::Student),
+            android_version: Set(None),
+        };
+
+        active_user
+            .save(app_state.get_database())
+            .await
+            .expect("Failed to save user");
     }
 
     #[actix_web::test]

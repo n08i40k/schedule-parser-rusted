@@ -1,4 +1,3 @@
-use crate::database::models::User;
 use crate::extractors::authorized_user;
 use crate::extractors::base::FromRequestAsync;
 use actix_web::body::{BoxBody, EitherBody};
@@ -7,6 +6,7 @@ use actix_web::{Error, HttpRequest, ResponseError};
 use futures_util::future::LocalBoxFuture;
 use std::future::{Ready, ready};
 use std::rc::Rc;
+use database::entity::User;
 
 /// Middleware guard working with JWT tokens.
 pub struct JWTAuthorization {

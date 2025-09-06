@@ -23,8 +23,7 @@ derive_more = { version = "2.0.1", features = ["full"] }
 dotenvy = "0.15.7"
 
 # sql
-diesel = { version = "2.2.12", features = ["postgres"] }
-diesel-derive-enum = { git = "https://github.com/Havunen/diesel-derive-enum.git", features = ["postgres"] }
+database = { path = "database" }
 
 # logging
 env_logger = "0.11.8"
@@ -73,3 +72,6 @@ ed25519-dalek = "3.0.0-pre.0"
 [dev-dependencies]
 providers = { path = "providers", features = ["test"] }
 actix-test = { path = "actix-test" }
+
+console-subscriber = "0.4.1"
+tracing = "0.1.41"

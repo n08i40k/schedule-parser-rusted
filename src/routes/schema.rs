@@ -126,8 +126,9 @@ where
 }
 
 pub mod user {
-    use crate::database::models::{User, UserRole};
     use actix_macros::{OkResponse, ResponderJson};
+    use database::entity::sea_orm_active_enums::UserRole;
+    use database::entity::User;
     use serde::Serialize;
 
     //noinspection SpellCheckingInspection
@@ -165,17 +166,31 @@ pub mod user {
         pub access_token: Option<String>,
     }
 
-    /// Create UserResponse from User ref.
-    impl From<&User> for UserResponse {
-        fn from(user: &User) -> Self {
-            UserResponse {
+    impl UserResponse {
+        pub fn from_user_with_token(user: User, access_token: String) -> Self {
+            Self {
                 id: user.id.clone(),
                 username: user.username.clone(),
                 group: user.group.clone(),
                 role: user.role.clone(),
                 vk_id: user.vk_id.clone(),
                 telegram_id: user.telegram_id.clone(),
-                access_token: user.access_token.clone(),
+                access_token: Some(access_token),
+            }
+        }
+    }
+
+    /// Create UserResponse from User ref.
+    impl From<&User> for UserResponse {
+        fn from(user: &User) -> Self {
+            Self {
+                id: user.id.clone(),
+                username: user.username.clone(),
+                group: user.group.clone(),
+                role: user.role.clone(),
+                vk_id: user.vk_id.clone(),
+                telegram_id: user.telegram_id.clone(),
+                access_token: None,
             }
         }
     }
@@ -183,14 +198,14 @@ pub mod user {
     /// Transform User to UserResponse.
     impl From<User> for UserResponse {
         fn from(user: User) -> Self {
-            UserResponse {
+            Self {
                 id: user.id,
                 username: user.username,
                 group: user.group,
                 role: user.role,
                 vk_id: user.vk_id,
                 telegram_id: user.telegram_id,
-                access_token: user.access_token,
+                access_token: None,
             }
         }
     }

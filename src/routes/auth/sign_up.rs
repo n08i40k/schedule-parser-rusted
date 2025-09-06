@@ -1,11 +1,14 @@
 use self::schema::*;
-use crate::AppState;
-use crate::database::driver;
-use crate::database::models::UserRole;
 use crate::routes::auth::shared::parse_vk_id;
-use crate::routes::schema::ResponseError;
 use crate::routes::schema::user::UserResponse;
+use crate::routes::schema::ResponseError;
+use crate::{utility, AppState};
 use actix_web::{post, web};
+use database::entity::sea_orm_active_enums::UserRole;
+use database::entity::ActiveUser;
+use database::query::Query;
+use database::sea_orm::ActiveModelTrait;
+use std::ops::Deref;
 use web::Json;
 
 async fn sign_up_combined(
@@ -28,22 +31,31 @@ async fn sign_up_combined(
         return Err(ErrorCode::InvalidGroupName);
     }
 
-    // If user with specified username already exists.
-    if driver::users::contains_by_username(&app_state, &data.username).await {
+    let db = app_state.get_database();
+
+    // If user with specified username already exists.O
+    if Query::find_user_by_username(db, &data.username)
+        .await
+        .is_ok_and(|user| user.is_some())
+    {
         return Err(ErrorCode::UsernameAlreadyExists);
     }
 
     // If user with specified VKID already exists.
     if let Some(id) = data.vk_id {
-        if driver::users::contains_by_vk_id(&app_state, id).await {
+        if Query::find_user_by_vk_id(db, id)
+            .await
+            .is_ok_and(|user| user.is_some())
+        {
             return Err(ErrorCode::VkAlreadyExists);
         }
     }
 
-    let user = data.into();
-    driver::users::insert(&app_state, &user).await.unwrap();
+    let active_user: ActiveUser = data.into();
+    let user = active_user.insert(db).await.unwrap();
+    let access_token = utility::jwt::encode(&user.id);
 
-    Ok(UserResponse::from(&user)).into()
+    Ok(UserResponse::from_user_with_token(user, access_token))
 }
 
 #[utoipa::path(responses(
@@ -101,10 +113,11 @@ pub async fn sign_up_vk(
 }
 
 mod schema {
-    use crate::database::models::{User, UserRole};
     use crate::routes::schema::user::UserResponse;
-    use crate::utility;
     use actix_macros::ErrResponse;
+    use database::entity::sea_orm_active_enums::UserRole;
+    use database::entity::ActiveUser;
+    use database::sea_orm::Set;
     use derive_more::Display;
     use objectid::ObjectId;
     use serde::{Deserialize, Serialize};
@@ -134,7 +147,7 @@ mod schema {
     }
 
     pub mod vk {
-        use crate::database::models::UserRole;
+        use database::entity::sea_orm_active_enums::UserRole;
         use serde::{Deserialize, Serialize};
 
         #[derive(Serialize, Deserialize, utoipa::ToSchema)]
@@ -215,25 +228,21 @@ mod schema {
         pub version: String,
     }
 
-    impl Into<User> for SignUpData {
-        fn into(self) -> User {
+    impl Into<ActiveUser> for SignUpData {
+        fn into(self) -> ActiveUser {
             assert_ne!(self.password.is_some(), self.vk_id.is_some());
 
-            let id = ObjectId::new().unwrap().to_string();
-            let access_token = Some(utility::jwt::encode(&id));
-
-            User {
-                id,
-                username: self.username,
-                password: self
+            ActiveUser {
+                id: Set(ObjectId::new().unwrap().to_string()),
+                username: Set(self.username),
+                password: Set(self
                     .password
-                    .map(|x| bcrypt::hash(x, bcrypt::DEFAULT_COST).unwrap()),
-                vk_id: self.vk_id,
-                telegram_id: None,
-                access_token,
-                group: Some(self.group),
-                role: self.role,
-                android_version: Some(self.version),
+                    .map(|x| bcrypt::hash(x, bcrypt::DEFAULT_COST).unwrap())),
+                vk_id: Set(self.vk_id),
+                telegram_id: Set(None),
+                group: Set(Some(self.group)),
+                role: Set(self.role),
+                android_version: Set(Some(self.version)),
             }
         }
     }
@@ -241,8 +250,6 @@ mod schema {
 
 #[cfg(test)]
 mod tests {
-    use crate::database::driver;
-    use crate::database::models::UserRole;
     use crate::routes::auth::sign_up::schema::Request;
     use crate::routes::auth::sign_up::sign_up;
     use crate::test_env::tests::{static_app_state, test_app_state, test_env};
@@ -251,6 +258,11 @@ mod tests {
     use actix_web::http::Method;
     use actix_web::http::StatusCode;
     use actix_web::test;
+    use database::entity::sea_orm_active_enums::UserRole;
+    use database::entity::{UserColumn, UserEntity};
+    use database::sea_orm::ColumnTrait;
+    use database::sea_orm::{EntityTrait, QueryFilter};
+    use std::ops::Deref;
 
     struct SignUpPartial<'a> {
         username: &'a str,
@@ -282,7 +294,12 @@ mod tests {
         test_env();
 
         let app_state = static_app_state().await;
-        driver::users::delete_by_username(&app_state, &"test::sign_up_valid".to_string()).await;
+
+        UserEntity::delete_many()
+            .filter(UserColumn::Username.eq("test::sign_up_valid"))
+            .exec(app_state.get_database())
+            .await
+            .expect("Failed to delete user");
 
         // test
 
@@ -303,7 +320,12 @@ mod tests {
         test_env();
 
         let app_state = static_app_state().await;
-        driver::users::delete_by_username(&app_state, &"test::sign_up_multiple".to_string()).await;
+
+        UserEntity::delete_many()
+            .filter(UserColumn::Username.eq("test::sign_up_multiple"))
+            .exec(app_state.get_database())
+            .await
+            .expect("Failed to delete user");
 
         let create = sign_up_client(SignUpPartial {
             username: "test::sign_up_multiple",

@@ -1,13 +1,15 @@
 use self::schema::*;
-use crate::database::driver;
-use crate::database::driver::users::UserSave;
-use crate::database::models::{User, UserRole};
 use crate::routes::schema::ResponseError;
 use crate::utility::telegram::{WebAppInitDataMap, WebAppUser};
-use crate::{AppState, utility};
+use crate::{utility, AppState};
 use actix_web::{post, web};
 use chrono::{DateTime, Duration, Utc};
+use database::entity::sea_orm_active_enums::UserRole;
+use database::entity::ActiveUser;
+use database::query::Query;
+use database::sea_orm::{ActiveModelTrait, Set};
 use objectid::ObjectId;
+use std::ops::Deref;
 use std::sync::Arc;
 use web::Json;
 
@@ -48,39 +50,28 @@ pub async fn telegram_auth(
     let web_app_user =
         serde_json::from_str::<WebAppUser>(init_data.data_map.get("user").unwrap()).unwrap();
 
-    let mut user = {
-        match driver::users::get_by_telegram_id(&app_state, web_app_user.id).await {
-            Ok(value) => Ok(value),
-            Err(_) => {
-                let new_user = User {
-                    id: ObjectId::new().unwrap().to_string(),
-                    username: format!("telegram_{}", web_app_user.id), // можно оставить, а можно поменять
-                    password: None,                                    // ибо нехуй
-                    vk_id: None,
-                    telegram_id: Some(web_app_user.id),
-                    access_token: None, // установится ниже
-                    group: None,
-                    role: UserRole::Student, // TODO: при реге проверять данные
-                    android_version: None,
+    let user =
+        match Query::find_user_by_telegram_id(app_state.get_database(), web_app_user.id).await {
+            Ok(Some(value)) => Ok(value),
+            _ => {
+                let new_user = ActiveUser {
+                    id: Set(ObjectId::new().unwrap().to_string()),
+                    username: Set(format!("telegram_{}", web_app_user.id)), // можно оставить, а можно поменять
+                    password: Set(None),                                    // ибо нехуй
+                    vk_id: Set(None),
+                    telegram_id: Set(Some(web_app_user.id)),
+                    group: Set(None),
+                    role: Set(UserRole::Student), // TODO: при реге проверять данные
+                    android_version: Set(None),
                 };
 
-                driver::users::insert(&app_state, &new_user)
-                    .await
-                    .map(|_| new_user)
+                new_user.insert(app_state.get_database()).await
             }
         }
-        .expect("Failed to get or add user")
-    };
+        .expect("Failed to get or add user");
 
-    user.access_token = Some(utility::jwt::encode(&user.id));
-
-    user.save(&app_state).await.expect("Failed to update user");
-
-    Ok(Response::new(
-        &*user.access_token.unwrap(),
-        user.group.is_some(),
-    ))
-    .into()
+    let access_token = utility::jwt::encode(&user.id);
+    Ok(Response::new(&access_token, user.group.is_some())).into()
 }
 
 mod schema {
@@ -89,9 +80,9 @@ mod schema {
     use crate::utility::telegram::VerifyError;
     use actix_macros::ErrResponse;
     use actix_web::body::EitherBody;
-    use actix_web::cookie::CookieBuilder;
     use actix_web::cookie::time::OffsetDateTime;
-    use actix_web::{HttpRequest, HttpResponse, web};
+    use actix_web::cookie::CookieBuilder;
+    use actix_web::{web, HttpRequest, HttpResponse};
     use derive_more::Display;
     use serde::{Deserialize, Serialize, Serializer};
     use std::ops::Add;

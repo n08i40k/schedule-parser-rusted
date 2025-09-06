@@ -1,11 +1,12 @@
 use self::schema::*;
-use crate::AppState;
-use crate::database::driver;
-use crate::database::driver::users::UserSave;
-use crate::database::models::User;
 use crate::extractors::base::AsyncExtractor;
 use crate::routes::schema::ResponseError;
+use crate::AppState;
 use actix_web::{post, web};
+use database::entity::User;
+use database::query::Query;
+use database::sea_orm::{ActiveModelTrait, IntoActiveModel, Set};
+use std::ops::Deref;
 use web::Json;
 
 #[utoipa::path(responses(
@@ -20,7 +21,7 @@ pub async fn telegram_complete(
     app_state: web::Data<AppState>,
     user: AsyncExtractor<User>,
 ) -> ServiceResponse {
-    let mut user = user.into_inner();
+    let user = user.into_inner();
 
     // проверка на перезапись уже имеющихся данных
     if user.group.is_some() {
@@ -29,13 +30,19 @@ pub async fn telegram_complete(
 
     let data = data.into_inner();
 
+    let db = app_state.get_database();
+    let mut active_user = user.clone().into_active_model();
+
     // замена существующего имени, если оно отличается
     if user.username != data.username {
-        if driver::users::contains_by_username(&app_state, &data.username).await {
+        if Query::is_user_exists_by_username(db, &data.username)
+            .await
+            .unwrap()
+        {
             return Err(ErrorCode::UsernameAlreadyExists).into();
         }
 
-        user.username = data.username;
+        active_user.username = Set(data.username);
     }
 
     // проверка на существование группы
@@ -50,9 +57,12 @@ pub async fn telegram_complete(
         return Err(ErrorCode::InvalidGroupName).into();
     }
 
-    user.group = Some(data.group);
+    active_user.group = Set(Some(data.group));
 
-    user.save(&app_state).await.expect("Failed to update user");
+    active_user
+        .update(db)
+        .await
+        .expect("Failed to update user");
 
     Ok(()).into()
 }

@@ -1,9 +1,10 @@
 use self::schema::*;
-use crate::database::driver::users::UserSave;
-use crate::database::models::User;
 use crate::extractors::base::AsyncExtractor;
 use crate::state::AppState;
 use actix_web::{post, web};
+use database::entity::User;
+use database::sea_orm::{ActiveModelTrait, IntoActiveModel, Set};
+use std::ops::Deref;
 
 #[utoipa::path(responses((status = OK)))]
 #[post("/change-group")]
@@ -12,9 +13,13 @@ pub async fn change_group(
     user: AsyncExtractor<User>,
     data: web::Json<Request>,
 ) -> ServiceResponse {
-    let mut user = user.into_inner();
+    let user = user.into_inner();
 
-    if user.group.is_some_and(|group| group == data.group) {
+    if user
+        .group
+        .as_ref()
+        .is_some_and(|group| group.eq(&data.group))
+    {
         return Ok(()).into();
     }
 
@@ -28,10 +33,12 @@ pub async fn change_group(
     {
         return Err(ErrorCode::NotFound).into();
     }
-    
-    user.group = Some(data.into_inner().group);
-    user.save(&app_state).await.unwrap();
-    
+
+    let mut active_user = user.clone().into_active_model();
+    active_user.group = Set(Some(data.into_inner().group));
+
+    active_user.update(app_state.get_database()).await.unwrap();
+
     Ok(()).into()
 }
 
