@@ -111,7 +111,7 @@ fn main() -> io::Result<()> {
         },
     ));
 
-    dotenv().unwrap();
+    let _ = dotenv();
 
     env_logger::init();
 
