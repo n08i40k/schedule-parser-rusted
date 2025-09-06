@@ -80,11 +80,11 @@ mod schema {
     #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
     #[schema(as = Flow::TelegramFill::ErrorCode)]
     pub enum ErrorCode {
-        #[display("This flow already completed.")]
+        #[display("This flow is already completed.")]
         #[status_code = "actix_web::http::StatusCode::CONFLICT"]
         AlreadyCompleted,
 
-        #[display("Username is already exists.")]
+        #[display("User with that name already exists.")]
         #[status_code = "actix_web::http::StatusCode::BAD_REQUEST"]
         UsernameAlreadyExists,
 
