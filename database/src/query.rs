@@ -59,4 +59,5 @@ impl Query {
     define_is_exists!(user, id, str, Id);
     define_is_exists!(user, username, str, Username);
     define_is_exists!(user, telegram_id, i64, TelegramId);
+    define_is_exists!(user, vk_id, i32, VkId);
 }

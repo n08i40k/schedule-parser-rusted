@@ -22,7 +22,7 @@ struct Claims {
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
-    JwtError(ErrorKind),
+    Jwt(ErrorKind),
     InvalidSignature,
     InvalidToken,
     Expired,
@@ -49,10 +49,10 @@ const VK_PUBLIC_KEY: &str = concat!(
     "-----END PUBLIC KEY-----"
 );
 
-pub fn parse_vk_id(token_str: &String, client_id: i32) -> Result<i32, Error> {
+pub fn parse_vk_id(token_str: &str, client_id: i32) -> Result<i32, Error> {
     let dkey = DecodingKey::from_rsa_pem(VK_PUBLIC_KEY.as_bytes()).unwrap();
 
-    match decode::<Claims>(&token_str, &dkey, &Validation::new(Algorithm::RS256)) {
+    match decode::<Claims>(token_str, &dkey, &Validation::new(Algorithm::RS256)) {
         Ok(token_data) => {
             let claims = token_data.claims;
 
@@ -77,7 +77,7 @@ pub fn parse_vk_id(token_str: &String, client_id: i32) -> Result<i32, Error> {
             ErrorKind::Base64(_) => Error::InvalidToken,
             ErrorKind::Json(_) => Error::InvalidToken,
             ErrorKind::Utf8(_) => Error::InvalidToken,
-            kind => Error::JwtError(kind),
+            kind => Error::Jwt(kind),
         }),
     }
 }

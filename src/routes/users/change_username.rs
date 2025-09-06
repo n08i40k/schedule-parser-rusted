@@ -5,7 +5,6 @@ use actix_web::{post, web};
 use database::entity::User;
 use database::query::Query;
 use database::sea_orm::{ActiveModelTrait, IntoActiveModel, Set};
-use std::ops::Deref;
 
 #[utoipa::path(responses((status = OK)))]
 #[post("/change-username")]

@@ -11,7 +11,6 @@ use database::query::Query;
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-use std::ops::Deref;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Display, MiddlewareError)]
 #[status_code = "actix_web::http::StatusCode::UNAUTHORIZED"]

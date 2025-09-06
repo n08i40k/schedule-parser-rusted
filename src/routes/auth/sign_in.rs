@@ -28,7 +28,7 @@ async fn sign_in_combined(
                     return Err(ErrorCode::IncorrectCredentials);
                 }
 
-                match bcrypt::verify(&data.password, &user.password.as_ref().unwrap()) {
+                match bcrypt::verify(&data.password, user.password.as_ref().unwrap()) {
                     Ok(result) => {
                         if !result {
                             return Err(ErrorCode::IncorrectCredentials);
@@ -123,8 +123,6 @@ mod schema {
         #[display("Invalid VK ID token.")]
         InvalidVkAccessToken,
     }
-
-    /// Internal
 
     /// Type of authorization.
     pub enum SignInData {

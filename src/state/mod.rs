@@ -23,7 +23,7 @@ impl AppState {
         let env = AppEnv::default();
         let providers: HashMap<String, Arc<dyn ScheduleProvider>> = HashMap::from([(
             "eng_polytechnic".to_string(),
-            providers::EngelsPolytechnicProvider::new({
+            providers::EngelsPolytechnicProvider::get({
                 #[cfg(test)]
                 {
                     providers::EngelsPolytechnicUpdateSource::Prepared(ScheduleSnapshot {
@@ -64,7 +64,7 @@ impl AppState {
         };
 
         if this.env.schedule.auto_update {
-            for (_, provider) in &this.providers {
+            for provider in this.providers.values() {
                 let provider = provider.clone();
                 let cancel_token = this.cancel_token.clone();
 
@@ -93,6 +93,8 @@ impl AppState {
 }
 
 /// Create a new object web::Data<AppState>.
-pub async fn new_app_state(database: Option<DatabaseConnection>) -> Result<web::Data<AppState>, Box<dyn std::error::Error>> {
+pub async fn new_app_state(
+    database: Option<DatabaseConnection>,
+) -> Result<web::Data<AppState>, Box<dyn std::error::Error>> {
     Ok(web::Data::new(AppState::new(database).await?))
 }

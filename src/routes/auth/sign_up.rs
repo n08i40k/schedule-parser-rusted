@@ -8,7 +8,6 @@ use database::entity::sea_orm_active_enums::UserRole;
 use database::entity::ActiveUser;
 use database::query::Query;
 use database::sea_orm::ActiveModelTrait;
-use std::ops::Deref;
 use web::Json;
 
 async fn sign_up_combined(
@@ -42,13 +41,12 @@ async fn sign_up_combined(
     }
 
     // If user with specified VKID already exists.
-    if let Some(id) = data.vk_id {
-        if Query::find_user_by_vk_id(db, id)
+    if let Some(id) = data.vk_id
+        && Query::is_user_exists_by_vk_id(db, id)
             .await
-            .is_ok_and(|user| user.is_some())
-        {
-            return Err(ErrorCode::VkAlreadyExists);
-        }
+            .expect("Failed to check user existence")
+    {
+        return Err(ErrorCode::VkAlreadyExists);
     }
 
     let active_user: ActiveUser = data.into();
@@ -202,8 +200,6 @@ mod schema {
         VkAlreadyExists,
     }
 
-    /// Internal
-
     /// Data for registration.
     pub struct SignUpData {
         // TODO: сделать ограничение на минимальную и максимальную длину при регистрации и смене.
@@ -228,21 +224,21 @@ mod schema {
         pub version: String,
     }
 
-    impl Into<ActiveUser> for SignUpData {
-        fn into(self) -> ActiveUser {
-            assert_ne!(self.password.is_some(), self.vk_id.is_some());
+    impl From<SignUpData> for ActiveUser {
+        fn from(value: SignUpData) -> Self {
+            assert_ne!(value.password.is_some(), value.vk_id.is_some());
 
             ActiveUser {
                 id: Set(ObjectId::new().unwrap().to_string()),
-                username: Set(self.username),
-                password: Set(self
+                username: Set(value.username),
+                password: Set(value
                     .password
                     .map(|x| bcrypt::hash(x, bcrypt::DEFAULT_COST).unwrap())),
-                vk_id: Set(self.vk_id),
+                vk_id: Set(value.vk_id),
                 telegram_id: Set(None),
-                group: Set(Some(self.group)),
-                role: Set(self.role),
-                android_version: Set(Some(self.version)),
+                group: Set(Some(value.group)),
+                role: Set(value.role),
+                android_version: Set(Some(value.version)),
             }
         }
     }
@@ -262,7 +258,6 @@ mod tests {
     use database::entity::{UserColumn, UserEntity};
     use database::sea_orm::ColumnTrait;
     use database::sea_orm::{EntityTrait, QueryFilter};
-    use std::ops::Deref;
 
     struct SignUpPartial<'a> {
         username: &'a str,

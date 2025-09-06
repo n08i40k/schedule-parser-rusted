@@ -25,7 +25,7 @@ pub struct EngelsPolytechnicProvider {
 }
 
 impl EngelsPolytechnicProvider {
-    pub async fn new(
+    pub async fn get(
         update_source: UpdateSource,
     ) -> Result<Arc<dyn ScheduleProvider>, crate::updater::error::Error> {
         let (updater, snapshot) = Updater::new(update_source).await?;
@@ -60,7 +60,7 @@ impl ScheduleProvider for Wrapper {
 
                     log::info!("Updating schedule...");
 
-                    match this.updater.update(&mut this.snapshot).await {
+                    match this.updater.update(&this.snapshot).await {
                         Ok(snapshot) => {
                             this.snapshot = Arc::new(snapshot);
                         },

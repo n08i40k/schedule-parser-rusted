@@ -63,13 +63,13 @@ struct Claims {
 pub(crate) const DEFAULT_ALGORITHM: Algorithm = Algorithm::HS256;
 
 /// Checking the token and extracting the UUID of the user account from it.
-pub fn verify_and_decode(token: &String) -> Result<String, Error> {
+pub fn verify_and_decode(token: &str) -> Result<String, Error> {
     let mut validation = Validation::new(DEFAULT_ALGORITHM);
 
     validation.required_spec_claims.remove("exp");
     validation.validate_exp = false;
 
-    let result = decode::<Claims>(&token, &*DECODING_KEY, &validation);
+    let result = decode::<Claims>(token, &DECODING_KEY, &validation);
 
     match result {
         Ok(token_data) => {
@@ -88,7 +88,7 @@ pub fn verify_and_decode(token: &String) -> Result<String, Error> {
 }
 
 /// Creating a user token.
-pub fn encode(id: &String) -> String {
+pub fn encode(id: &str) -> String {
     let header = Header {
         typ: Some(String::from("JWT")),
         ..Default::default()
@@ -98,12 +98,12 @@ pub fn encode(id: &String) -> String {
     let exp = iat + Duration::days(365 * 4);
 
     let claims = Claims {
-        id: id.clone(),
+        id: id.to_string(),
         iat: iat.timestamp().unsigned_abs(),
         exp: exp.timestamp().unsigned_abs(),
     };
 
-    jsonwebtoken::encode(&header, &claims, &*ENCODING_KEY).unwrap()
+    jsonwebtoken::encode(&header, &claims, &ENCODING_KEY).unwrap()
 }
 
 #[cfg(test)]

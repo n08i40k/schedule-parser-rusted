@@ -6,7 +6,7 @@ mod shared {
     use quote::{ToTokens, quote};
     use syn::{Attribute, DeriveInput};
 
-    pub fn find_status_code(attrs: &Vec<Attribute>) -> Option<proc_macro2::TokenStream> {
+    pub fn find_status_code(attrs: &[Attribute]) -> Option<proc_macro2::TokenStream> {
         attrs
             .iter()
             .find_map(|attr| -> Option<proc_macro2::TokenStream> {
@@ -41,14 +41,12 @@ mod shared {
 
         let mut status_code_arms: Vec<proc_macro2::TokenStream> = variants
             .iter()
-            .map(|v| -> Option<proc_macro2::TokenStream> {
+            .filter_map(|v| -> Option<proc_macro2::TokenStream> {
                 let status_code = find_status_code(&v.attrs)?;
                 let variant_name = &v.ident;
 
                 Some(quote! { #name::#variant_name => #status_code, })
             })
-            .filter(|v| v.is_some())
-            .map(|v| v.unwrap())
             .collect();
 
         if status_code_arms.len() < variants.len() {

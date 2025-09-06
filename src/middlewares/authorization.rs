@@ -1,23 +1,18 @@
 use crate::extractors::authorized_user;
 use crate::extractors::base::FromRequestAsync;
 use actix_web::body::{BoxBody, EitherBody};
-use actix_web::dev::{Payload, Service, ServiceRequest, ServiceResponse, Transform, forward_ready};
+use actix_web::dev::{forward_ready, Payload, Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::{Error, HttpRequest, ResponseError};
-use futures_util::future::LocalBoxFuture;
-use std::future::{Ready, ready};
-use std::rc::Rc;
 use database::entity::User;
+use futures_util::future::LocalBoxFuture;
+use std::future::{ready, Ready};
+use std::rc::Rc;
 
 /// Middleware guard working with JWT tokens.
+#[derive(Default)]
 pub struct JWTAuthorization {
     /// List of ignored endpoints.
     pub ignore: &'static [&'static str],
-}
-
-impl Default for JWTAuthorization {
-    fn default() -> Self {
-        Self { ignore: &[] }
-    }
 }
 
 impl<S, B> Transform<S, ServiceRequest> for JWTAuthorization
@@ -70,8 +65,8 @@ where
                 return false;
             }
 
-            if let Some(other) = path.as_bytes().iter().nth(ignore.len()) {
-                return ['?' as u8, '/' as u8].contains(other);
+            if let Some(other) = path.as_bytes().get(ignore.len()) {
+                return [b'?', b'/'].contains(other);
             }
 
             true

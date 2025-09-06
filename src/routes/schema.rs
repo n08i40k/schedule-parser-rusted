@@ -13,13 +13,13 @@ where
     E: Serialize + PartialSchema + Display + PartialErrResponse;
 
 /// Transform Response<T, E> into Result<T, E>
-impl<T, E> Into<Result<T, E>> for Response<T, E>
+impl<T, E> From<Response<T, E>> for Result<T, E>
 where
     T: Serialize + PartialSchema + PartialOkResponse,
     E: Serialize + PartialSchema + Display + PartialErrResponse,
 {
-    fn into(self) -> Result<T, E> {
-        self.0
+    fn from(value: Response<T, E>) -> Self {
+        value.0
     }
 }
 
@@ -46,7 +46,7 @@ where
     {
         match &self.0 {
             Ok(ok) => serializer.serialize_some(&ok),
-            Err(err) => serializer.serialize_some(&ResponseError::<E>::from(err.clone().into())),
+            Err(err) => serializer.serialize_some(&err.clone().into()),
         }
     }
 }
@@ -95,7 +95,7 @@ pub trait PartialOkResponse {
         &mut self,
         _request: &HttpRequest,
         _response: &mut HttpResponse<EitherBody<String>>,
-    ) -> () {
+    ) {
     }
 }
 
@@ -173,8 +173,8 @@ pub mod user {
                 username: user.username.clone(),
                 group: user.group.clone(),
                 role: user.role.clone(),
-                vk_id: user.vk_id.clone(),
-                telegram_id: user.telegram_id.clone(),
+                vk_id: user.vk_id,
+                telegram_id: user.telegram_id,
                 access_token: Some(access_token),
             }
         }
@@ -188,8 +188,8 @@ pub mod user {
                 username: user.username.clone(),
                 group: user.group.clone(),
                 role: user.role.clone(),
-                vk_id: user.vk_id.clone(),
-                telegram_id: user.telegram_id.clone(),
+                vk_id: user.vk_id,
+                telegram_id: user.telegram_id,
                 access_token: None,
             }
         }

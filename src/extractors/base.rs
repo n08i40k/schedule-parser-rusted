@@ -5,7 +5,6 @@ use std::future::{Ready, ready};
 use std::ops;
 
 /// # Async extractor.
-
 /// Asynchronous object extractor from a query.
 pub struct AsyncExtractor<T>(T);
 
@@ -80,7 +79,6 @@ impl<T: FromRequestAsync> FromRequest for AsyncExtractor<T> {
 }
 
 /// # Sync extractor.
-
 /// Synchronous object extractor from a query.
 pub struct SyncExtractor<T>(T);
 

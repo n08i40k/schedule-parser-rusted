@@ -1,5 +1,5 @@
 use crate::or_continue;
-use crate::parser::error::{ErrorCell, ErrorCellPos};
+use crate::parser::error::{Error, ErrorCell, ErrorCellPos};
 use crate::parser::worksheet::WorkSheet;
 use crate::parser::LessonParseResult::{Lessons, Street};
 use base::LessonType::Break;
@@ -230,7 +230,7 @@ enum LessonParseResult {
 
 // noinspection GrazieInspection
 /// Obtaining a non-standard type of lesson by name.
-fn guess_lesson_type(text: &String) -> Option<LessonType> {
+fn guess_lesson_type(text: &str) -> Option<LessonType> {
     static MAP: LazyLock<HashMap<&str, LessonType>> = LazyLock::new(|| {
         HashMap::from([
             ("консультация", LessonType::Consultation),
@@ -245,22 +245,18 @@ fn guess_lesson_type(text: &String) -> Option<LessonType> {
 
     let name_lower = text.to_lowercase();
 
-    match MAP
-        .iter()
-        .map(|(text, lesson_type)| (lesson_type, strsim::levenshtein(text, &*name_lower)))
+    MAP.iter()
+        .map(|(text, lesson_type)| (lesson_type, strsim::levenshtein(text, &name_lower)))
         .filter(|x| x.1 <= 4)
         .min_by_key(|(_, score)| *score)
-    {
-        None => None,
-        Some(v) => Some(v.0.clone()),
-    }
+        .map(|v| v.0.clone())
 }
 
 /// Getting a pair or street from a cell.
 fn parse_lesson(
     worksheet: &WorkSheet,
     day: &Day,
-    day_boundaries: &Vec<BoundariesCellInfo>,
+    day_boundaries: &[BoundariesCellInfo],
     lesson_boundaries: &BoundariesCellInfo,
     group_column: u32,
 ) -> Result<LessonParseResult, crate::parser::error::Error> {
@@ -297,7 +293,7 @@ fn parse_lesson(
                 column: group_column,
             }))?;
 
-        let range: Option<[u8; 2]> = if lesson_boundaries.default_index != None {
+        let range: Option<[u8; 2]> = if lesson_boundaries.default_index.is_some() {
             let default = lesson_boundaries.default_index.unwrap() as u8;
             Some([default, end_time.default_index.unwrap() as u8])
         } else {
@@ -312,7 +308,11 @@ fn parse_lesson(
         Ok((range, time))
     }?;
 
-    let (name, mut subgroups, lesson_type) = parse_name_and_subgroups(&name)?;
+    let ParsedLessonName {
+        name,
+        mut subgroups,
+        r#type: lesson_type,
+    } = parse_name_and_subgroups(&name)?;
 
     {
         let cabinets: Vec<String> = parse_cabinets(
@@ -325,12 +325,10 @@ fn parse_lesson(
 
         if cab_count == 1 {
             // Назначаем этот кабинет всем подгруппам
-            let cab = Some(cabinets.get(0).unwrap().clone());
+            let cab = Some(cabinets.first().unwrap().clone());
 
-            for subgroup in &mut subgroups {
-                if let Some(subgroup) = subgroup {
-                    subgroup.cabinet = cab.clone()
-                }
+            for subgroup in subgroups.iter_mut().flatten() {
+                subgroup.cabinet = cab.clone()
             }
         } else if cab_count == 2 {
             while subgroups.len() < cab_count {
@@ -361,10 +359,7 @@ fn parse_lesson(
         range: default_range,
         name: Some(name),
         time: lesson_time,
-        subgroups: if subgroups.len() == 2
-            && subgroups.get(0).unwrap().is_none()
-            && subgroups.get(1).unwrap().is_none()
-        {
+        subgroups: if subgroups.len() == 2 && subgroups.iter().all(|x| x.is_none()) {
             None
         } else {
             Some(subgroups)
@@ -416,12 +411,15 @@ fn parse_cabinets(worksheet: &WorkSheet, row_range: (u32, u32), column: u32) -> 
     cabinets
 }
 
+struct ParsedLessonName {
+    name: String,
+    subgroups: Vec<Option<LessonSubGroup>>,
+    r#type: Option<LessonType>,
+}
+
 //noinspection GrazieInspection
 /// Getting the "pure" name of the lesson and list of teachers from the text of the lesson cell.
-fn parse_name_and_subgroups(
-    text: &String,
-) -> Result<(String, Vec<Option<LessonSubGroup>>, Option<LessonType>), crate::parser::error::Error>
-{
+fn parse_name_and_subgroups(text: &str) -> Result<ParsedLessonName, Error> {
     // Части названия пары:
     // 1. Само название.
     // 2. Список преподавателей и подгрупп.
@@ -458,7 +456,7 @@ fn parse_name_and_subgroups(
     static CLEAN_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[\s\n\t]+").unwrap());
 
     let text = CLEAN_RE
-        .replace(&text.replace(&[' ', '\t', '\n'], " "), " ")
+        .replace(&text.replace([' ', '\t', '\n'], " "), " ")
         .to_string();
 
     let (lesson_name, subgroups, lesson_type) = match NAMES_REGEX.captures(&text) {
@@ -466,7 +464,7 @@ fn parse_name_and_subgroups(
             let capture = captures.get(0).unwrap();
 
             let subgroups: Vec<Option<LessonSubGroup>> = {
-                let src = capture.as_str().replace(&[' ', '.'], "");
+                let src = capture.as_str().replace([' ', '.'], "");
 
                 let mut shared_subgroup = false;
                 let mut subgroups: [Option<LessonSubGroup>; 2] = [None, None];
@@ -478,7 +476,7 @@ fn parse_name_and_subgroups(
                         .map_or(0, |index| name[(index + 1)..(index + 2)].parse().unwrap());
 
                     let teacher_name = {
-                        let name_end = open_bracket_index.unwrap_or_else(|| name.len());
+                        let name_end = open_bracket_index.unwrap_or(name.len());
 
                         // Я ебал. Как же я долго до этого доходил.
                         format!(
@@ -545,7 +543,11 @@ fn parse_name_and_subgroups(
         None => (text, Vec::new(), None),
     };
 
-    Ok((lesson_name, subgroups, lesson_type))
+    Ok(ParsedLessonName {
+        name: lesson_name,
+        subgroups,
+        r#type: lesson_type,
+    })
 }
 
 /// Getting the start and end of a pair from a cell in the first column of a document.
@@ -554,18 +556,11 @@ fn parse_name_and_subgroups(
 ///
 /// * `cell_data`: text in cell.
 /// * `date`: date of the current day.
-fn parse_lesson_boundaries_cell(
-    cell_data: &String,
-    date: DateTime<Utc>,
-) -> Option<LessonBoundaries> {
+fn parse_lesson_boundaries_cell(cell_data: &str, date: DateTime<Utc>) -> Option<LessonBoundaries> {
     static TIME_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(\d+\.\d+)-(\d+\.\d+)").unwrap());
 
-    let parse_res = if let Some(captures) = TIME_RE.captures(cell_data) {
-        captures
-    } else {
-        return None;
-    };
+    let parse_res = TIME_RE.captures(cell_data)?;
 
     let start_match = parse_res.get(1).unwrap().as_str();
     let start_parts: Vec<&str> = start_match.split(".").collect();
@@ -579,7 +574,7 @@ fn parse_lesson_boundaries_cell(
     };
 
     Some(LessonBoundaries {
-        start: GET_TIME(date.clone(), &start_parts),
+        start: GET_TIME(date, &start_parts),
         end: GET_TIME(date, &end_parts),
     })
 }
@@ -607,7 +602,7 @@ fn parse_day_boundaries(
             continue;
         };
 
-        let lesson_time = parse_lesson_boundaries_cell(&time_cell, date.clone()).ok_or(
+        let lesson_time = parse_lesson_boundaries_cell(&time_cell, date).ok_or(
             error::Error::LessonBoundaries(ErrorCell::new(row, column, time_cell.clone())),
         )?;
 
@@ -652,7 +647,7 @@ fn parse_day_boundaries(
 /// * `week_markup`: markup of the current week.
 fn parse_week_boundaries(
     worksheet: &WorkSheet,
-    week_markup: &Vec<DayCellInfo>,
+    week_markup: &[DayCellInfo],
 ) -> Result<Vec<Vec<BoundariesCellInfo>>, crate::parser::error::Error> {
     let mut result: Vec<Vec<BoundariesCellInfo>> = Vec::new();
 
@@ -671,8 +666,8 @@ fn parse_week_boundaries(
         };
 
         let day_boundaries = parse_day_boundaries(
-            &worksheet,
-            day_markup.date.clone(),
+            worksheet,
+            day_markup.date,
             (day_markup.row, end_row),
             lesson_time_column,
         )?;
@@ -698,7 +693,7 @@ fn convert_groups_to_teachers(
         .map(|day| Day {
             name: day.name.clone(),
             street: day.street.clone(),
-            date: day.date.clone(),
+            date: day.date,
             lessons: vec![],
         })
         .collect();
@@ -774,19 +769,6 @@ fn convert_groups_to_teachers(
 /// * `buffer`: XLS data containing schedule.
 ///
 /// returns: Result<ParseResult, crate::parser::error::Error>
-///
-/// # Examples
-///
-/// ```
-/// use schedule_parser::parse_xls;
-///
-/// let result = parse_xls(&include_bytes!("../../schedule.xls").to_vec());
-///
-/// assert!(result.is_ok(), "{}", result.err().unwrap());
-///
-/// assert_ne!(result.as_ref().unwrap().groups.len(), 0);
-/// assert_ne!(result.as_ref().unwrap().teachers.len(), 0);
-/// ```
 pub fn parse_xls(buffer: &Vec<u8>) -> Result<ParsedSchedule, crate::parser::error::Error> {
     let cursor = Cursor::new(&buffer);
     let mut workbook: Xls<_> =
@@ -800,7 +782,7 @@ pub fn parse_xls(buffer: &Vec<u8>) -> Result<ParsedSchedule, crate::parser::erro
             .clone();
 
         let worksheet_merges = workbook
-            .worksheet_merge_cells(&*worksheet_name)
+            .worksheet_merge_cells(&worksheet_name)
             .ok_or(error::Error::NoWorkSheets)?;
 
         WorkSheet {
@@ -820,7 +802,7 @@ pub fn parse_xls(buffer: &Vec<u8>) -> Result<ParsedSchedule, crate::parser::erro
             days: Vec::new(),
         };
 
-        for day_index in 0..(&week_markup).len() {
+        for day_index in 0..week_markup.len() {
             let day_markup = &week_markup[day_index];
 
             let mut day = Day {
@@ -836,8 +818,8 @@ pub fn parse_xls(buffer: &Vec<u8>) -> Result<ParsedSchedule, crate::parser::erro
                 match &mut parse_lesson(
                     &worksheet,
                     &day,
-                    &day_boundaries,
-                    &lesson_boundaries,
+                    day_boundaries,
+                    lesson_boundaries,
                     group_markup.column,
                 )? {
                     Lessons(lesson) => day.lessons.append(lesson),

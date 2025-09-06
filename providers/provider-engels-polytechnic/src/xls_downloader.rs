@@ -136,7 +136,7 @@ impl XlsDownloader {
             return Err(FetchError::bad_content_type(content_type.to_str().unwrap()));
         }
 
-        let last_modified = DateTime::parse_from_rfc2822(&last_modified.to_str().unwrap())
+        let last_modified = DateTime::parse_from_rfc2822(last_modified.to_str().unwrap())
             .unwrap()
             .with_timezone(&Utc);
 
@@ -151,14 +151,14 @@ impl XlsDownloader {
         if self.url.is_none() {
             Err(FetchError::NoUrlProvided)
         } else {
-            Self::fetch_specified(&*self.url.as_ref().unwrap(), head).await
+            Self::fetch_specified(self.url.as_ref().unwrap(), head).await
         }
     }
 
     pub async fn set_url(&mut self, url: &str) -> FetchResult {
         let result = Self::fetch_specified(url, true).await;
 
-        if let Ok(_) = result {
+        if result.is_ok() {
             self.url = Some(url.to_string());
         }
 

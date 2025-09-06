@@ -63,18 +63,6 @@ pub struct CacheStatus {
     pub updated_at: i64,
 }
 
-impl CacheStatus {
-    pub async fn from(value: &web::Data<AppState>) -> Self {
-        From::<&ScheduleSnapshot>::from(
-            value
-                .get_schedule_snapshot("eng_polytechnic")
-                .await
-                .unwrap()
-                .deref(),
-        )
-    }
-}
-
 impl From<&ScheduleSnapshot> for CacheStatus {
     fn from(value: &ScheduleSnapshot) -> Self {
         Self {

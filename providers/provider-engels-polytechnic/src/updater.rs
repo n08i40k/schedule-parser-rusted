@@ -90,7 +90,7 @@ impl Updater {
             return Err(SnapshotCreationError::SameUrl);
         }
 
-        let head_result = downloader.set_url(&*url).await.map_err(|error| {
+        let head_result = downloader.set_url(&url).await.map_err(|error| {
             if let FetchError::Unknown(error) = &error {
                 sentry::capture_error(&error);
             }
@@ -152,10 +152,10 @@ impl Updater {
             .header("Authorization", format!("Api-Key {}", api_key))
             .send()
             .await
-            .map_err(|error| QueryUrlError::RequestFailed(error))?
+            .map_err(QueryUrlError::RequestFailed)?
             .text()
             .await
-            .map_err(|error| QueryUrlError::RequestFailed(error))?;
+            .map_err(QueryUrlError::RequestFailed)?;
 
         Ok(format!("https://politehnikum-eng.ru{}", uri.trim()))
     }
@@ -196,7 +196,7 @@ impl Updater {
                 log::info!("Obtaining a link using FaaS...");
                 Self::query_url(yandex_api_key, yandex_func_id)
                     .await
-                    .map_err(|error| Error::QueryUrlFailed(error))?
+                    .map_err(Error::QueryUrlFailed)?
             }
             _ => unreachable!(),
         };
@@ -205,7 +205,7 @@ impl Updater {
 
         let snapshot = Self::new_snapshot(&mut this.downloader, url)
             .await
-            .map_err(|error| Error::SnapshotCreationFailed(error))?;
+            .map_err(Error::SnapshotCreationFailed)?;
 
         log::info!("Schedule snapshot successfully created!");
 
@@ -243,7 +243,7 @@ impl Updater {
                 yandex_func_id,
             } => Self::query_url(yandex_api_key.as_str(), yandex_func_id.as_str())
                 .await
-                .map_err(|error| Error::QueryUrlFailed(error))?,
+                .map_err(Error::QueryUrlFailed)?,
             _ => unreachable!(),
         };
 

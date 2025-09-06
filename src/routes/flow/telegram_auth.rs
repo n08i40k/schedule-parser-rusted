@@ -9,7 +9,6 @@ use database::entity::ActiveUser;
 use database::query::Query;
 use database::sea_orm::{ActiveModelTrait, Set};
 use objectid::ObjectId;
-use std::ops::Deref;
 use std::sync::Arc;
 use web::Json;
 
@@ -122,7 +121,7 @@ mod schema {
             &mut self,
             request: &HttpRequest,
             response: &mut HttpResponse<EitherBody<String>>,
-        ) -> () {
+        ) {
             let access_token = &self.access_token;
 
             let app_state = request.app_data::<web::Data<AppState>>().unwrap();

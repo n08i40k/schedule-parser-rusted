@@ -33,7 +33,7 @@ impl WebAppInitDataMap {
         };
 
         data.split('&')
-            .map(|kv| kv.split_once('=').unwrap_or_else(|| (kv, "")))
+            .map(|kv| kv.split_once('=').unwrap_or((kv, "")))
             .for_each(|(key, value)| {
                 this.data_map.insert(key.to_string(), value.to_string());
             });
