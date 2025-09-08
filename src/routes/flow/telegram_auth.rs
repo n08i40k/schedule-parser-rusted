@@ -49,25 +49,29 @@ pub async fn telegram_auth(
     let web_app_user =
         serde_json::from_str::<WebAppUser>(init_data.data_map.get("user").unwrap()).unwrap();
 
-    let user =
-        match Query::find_user_by_telegram_id(app_state.get_database(), web_app_user.id).await {
-            Ok(Some(value)) => Ok(value),
-            _ => {
-                let new_user = ActiveUser {
-                    id: Set(ObjectId::new().unwrap().to_string()),
-                    username: Set(format!("telegram_{}", web_app_user.id)), // можно оставить, а можно поменять
-                    password: Set(None),                                    // ибо нехуй
-                    vk_id: Set(None),
-                    telegram_id: Set(Some(web_app_user.id)),
-                    group: Set(None),
-                    role: Set(UserRole::Student), // TODO: при реге проверять данные
-                    android_version: Set(None),
-                };
+    let user = match Query::find_user_by_telegram_id(app_state.get_database(), web_app_user.id)
+        .await
+        .expect("Failed to find user by telegram id")
+    {
+        Some(value) => value,
+        None => {
+            let new_user = ActiveUser {
+                id: Set(ObjectId::new().unwrap().to_string()),
+                username: Set(format!("telegram_{}", web_app_user.id)), // можно оставить, а можно поменять
+                password: Set(None),                                    // ибо нехуй
+                vk_id: Set(None),
+                telegram_id: Set(Some(web_app_user.id)),
+                group: Set(None),
+                role: Set(UserRole::Student), // TODO: при реге проверять данные
+                android_version: Set(None),
+            };
 
-                new_user.insert(app_state.get_database()).await
-            }
+            new_user
+                .insert(app_state.get_database())
+                .await
+                .expect("Failed to insert user")
         }
-        .expect("Failed to get or add user");
+    };
 
     let access_token = utility::jwt::encode(&user.id);
     Ok(Response::new(&access_token, user.group.is_some())).into()
