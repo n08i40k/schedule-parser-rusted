@@ -21,7 +21,7 @@ actix-macros = { path = "actix-macros" }
 actix-web = "4.11.0"
 
 # basic
-chrono = { version = "0.4.41", features = ["serde"] }
+chrono = { version = "0.4.42", features = ["serde"] }
 derive_more = { version = "2.0.1", features = ["full"] }
 dotenvy = "0.15.7"
 
