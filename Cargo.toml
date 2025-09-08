@@ -70,7 +70,7 @@ log = "0.4.27"
 # telegram webdata deciding and verify
 base64 = "0.22.1"
 percent-encoding = "2.3.2"
-ed25519-dalek = "3.0.0-pre.0"
+ed25519-dalek = "3.0.0-pre.1"
 
 # development tracing
 console-subscriber = { version = "0.4.1", optional = true }
