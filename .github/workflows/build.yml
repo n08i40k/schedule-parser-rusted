@@ -1,0 +1,142 @@
+name: build
+
+on:
+  push:
+    branches: [ "master" ]
+    tags-ignore: [ "release/v*" ]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+  BINARY_NAME: schedule-parser-rusted
+
+  TEST_DB: ${{ secrets.TEST_DATABASE_URL }}
+
+  SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+  SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+  SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+
+  DOCKER_IMAGE_NAME: ${{ github.repository }}
+
+  DOCKER_REGISTRY_HOST: registry.n08i40k.ru
+  DOCKER_REGISTRY_USERNAME: ${{ github.repository_owner }}
+  DOCKER_REGISTRY_PASSWORD: ${{ secrets.DOCKER_REGISTRY_PASSWORD }}
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1.11.0
+        with:
+          toolchain: stable
+
+      - name: Test
+        run: |
+          cargo test --verbose
+        env:
+          DATABASE_URL: ${{ env.TEST_DB }}
+          SCHEDULE_DISABLE_AUTO_UPDATE: 1
+          JWT_SECRET: "test-secret-at-least-256-bits-used"
+          VK_ID_CLIENT_ID: 0
+          VK_ID_REDIRECT_URI: "vk0://vk.com/blank.html"
+          TELEGRAM_BOT_ID: 0
+          TELEGRAM_MINI_APP_HOST: example.com
+          TELEGRAM_TEST_DC: false
+          YANDEX_CLOUD_API_KEY: ""
+          YANDEX_CLOUD_FUNC_ID: ""
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1.11.0
+        with:
+          toolchain: stable
+
+      - name: Build
+        run: cargo build --release --verbose
+
+      - name: Extract debug symbols
+        run: |
+          objcopy --only-keep-debug target/release/${{ env.BINARY_NAME }}{,.d}
+          objcopy --strip-debug --strip-unneeded target/release/${{ env.BINARY_NAME }}
+          objcopy --add-gnu-debuglink target/release/${{ env.BINARY_NAME }}{.d,}
+
+      - name: Setup sentry-cli
+        uses: matbour/setup-sentry-cli@v2.0.0
+        with:
+          version: latest
+          token: ${{ env.SENTRY_AUTH_TOKEN }}
+          organization: ${{ env.SENTRY_ORG }}
+          project: ${{ env.SENTRY_PROJECT }}
+
+      - name: Upload debug symbols to Sentry
+        run: |
+          sentry-cli debug-files upload --include-sources .
+
+      - name: Upload build binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-binary
+          path: target/release/${{ env.BINARY_NAME }}
+
+      - name: Upload build debug symbols artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-symbols
+          path: target/release/${{ env.BINARY_NAME }}.d
+
+  docker:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-binary
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3.10.0
+
+      - name: Login to Registry
+        uses: docker/login-action@v3.4.0
+        with:
+          registry: ${{ env.DOCKER_REGISTRY_HOST }}
+          username: ${{ env.DOCKER_REGISTRY_USERNAME }}
+          password: ${{ env.DOCKER_REGISTRY_PASSWORD }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5.7.0
+        with:
+          images: ${{ env.DOCKER_REGISTRY_HOST }}/${{ env.DOCKER_IMAGE_NAME }}
+
+      - name: Build and push Docker image
+        id: build-and-push
+        uses: docker/build-push-action@v6.15.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            "BINARY_NAME=${{ env.BINARY_NAME }}"
