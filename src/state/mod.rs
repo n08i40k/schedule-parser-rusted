@@ -2,10 +2,12 @@ mod env;
 
 pub use crate::state::env::AppEnv;
 use actix_web::web;
-use database::sea_orm::{Database, DatabaseConnection};
+use database::migration::{Migrator, MigratorTrait};
+use database::sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use providers::base::{ScheduleProvider, ScheduleSnapshot};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
 /// Common data provided to endpoints.
@@ -55,9 +57,24 @@ impl AppState {
                 database
             } else {
                 let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-                Database::connect(&database_url)
+
+                let mut opt = ConnectOptions::new(database_url.clone());
+
+                opt.max_connections(4)
+                    .min_connections(2)
+                    .connect_timeout(Duration::from_secs(10))
+                    .idle_timeout(Duration::from_secs(8))
+                    .sqlx_logging(true);
+
+                let database = Database::connect(opt)
                     .await
-                    .unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
+                    .unwrap_or_else(|_| panic!("Error connecting to {}", database_url));
+
+                Migrator::up(&database, None)
+                    .await
+                    .expect("Failed to run database migrations");
+
+                database
             },
             env,
             providers,
