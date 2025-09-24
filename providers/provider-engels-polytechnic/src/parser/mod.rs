@@ -240,6 +240,7 @@ fn guess_lesson_type(text: &str) -> Option<LessonType> {
             ("экзамен", LessonType::ExamDefault),
             ("курсовой проект", LessonType::CourseProject),
             ("защита курсового проекта", LessonType::CourseProjectDefense),
+            ("практическое занятие", LessonType::Practice),
         ])
     });
 

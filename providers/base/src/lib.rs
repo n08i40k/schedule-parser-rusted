@@ -100,6 +100,9 @@ pub enum LessonType {
 
     /// Защита курсового проекта.
     CourseProjectDefense,
+    
+    /// Практическое занятие.
+    Practice
 }
 
 #[derive(Clone, Hash, Debug, Serialize, Deserialize, ToSchema)]
