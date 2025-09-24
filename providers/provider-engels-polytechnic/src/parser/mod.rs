@@ -448,7 +448,7 @@ fn parse_name_and_subgroups(text: &str) -> Result<ParsedLessonName, Error> {
 
     static NAMES_REGEX: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
-            r"(?:[А-Я][а-я]+\s?(?:[А-Я][\s.]*){2}(?:\(\s*\d\s*[а-я\s]+\))?(?:[\s,]+)?){1,2}+[\s.,]*",
+            r"(?:[А-Я][а-я]+\s?(?:[А-Я][\s.]*){2}(?:\(?\s*\d\s*[а-я\s]+\)?)?(?:[\s,.]+)?){1,2}+[\s.,]*",
         )
             .unwrap()
     });
@@ -457,7 +457,7 @@ fn parse_name_and_subgroups(text: &str) -> Result<ParsedLessonName, Error> {
     static CLEAN_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[\s\n\t]+").unwrap());
 
     let text = CLEAN_RE
-        .replace(&text.replace([' ', '\t', '\n'], " "), " ")
+        .replace(&text.replace([' ', '\t', '\n'], " ").replace(",", ""), " ")
         .to_string();
 
     let (lesson_name, subgroups, lesson_type) = match NAMES_REGEX.captures(&text) {
@@ -471,13 +471,15 @@ fn parse_name_and_subgroups(text: &str) -> Result<ParsedLessonName, Error> {
                 let mut subgroups: [Option<LessonSubGroup>; 2] = [None, None];
 
                 for name in src.split(',') {
-                    let open_bracket_index = name.find('(');
+                    let digit_index = name.find(|c: char| c.is_ascii_digit());
 
-                    let number: u8 = open_bracket_index
-                        .map_or(0, |index| name[(index + 1)..(index + 2)].parse().unwrap());
+                    let number: u8 =
+                        digit_index.map_or(0, |index| name[(index)..(index + 1)].parse().unwrap());
 
                     let teacher_name = {
-                        let name_end = open_bracket_index.unwrap_or(name.len());
+                        let name_end = name
+                            .find(|c: char| !c.is_alphabetic())
+                            .unwrap_or(name.len());
 
                         // Я ебал. Как же я долго до этого доходил.
                         format!(
