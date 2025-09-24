@@ -148,6 +148,9 @@ impl Updater {
         let client = reqwest::Client::new();
 
         let uri = {
+            // вот бы добавили named-scopes как в котлине,
+            // чтоб мне не пришлось такой хуйнёй страдать.
+            #[allow(unused_assignments)]
             let mut uri = String::new();
             let mut counter = 0;
 
