@@ -24,14 +24,13 @@ static ENCODING_KEY: LazyLock<EncodingKey> = LazyLock::new(|| {
 });
 
 /// Token verification errors.
-#[allow(dead_code)]
 #[derive(Debug)]
 pub enum Error {
     /// The token has a different signature.
     InvalidSignature,
 
     /// Token reading error.
-    InvalidToken(ErrorKind),
+    InvalidToken,
 
     /// Token expired.
     Expired,
@@ -82,7 +81,7 @@ pub fn verify_and_decode(token: &str) -> Result<String, Error> {
         Err(err) => Err(match err.into_kind() {
             ErrorKind::InvalidSignature => Error::InvalidSignature,
             ErrorKind::ExpiredSignature => Error::Expired,
-            kind => Error::InvalidToken(kind),
+            _ => Error::InvalidToken,
         }),
     }
 }
@@ -115,7 +114,7 @@ mod tests {
     fn test_encode() {
         test_env();
 
-        assert_eq!(encode(&"test".to_string()).is_empty(), false);
+        assert!(!encode("test").is_empty());
     }
 
     #[test]
@@ -128,7 +127,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.err().unwrap(),
-            Error::InvalidToken(ErrorKind::InvalidToken)
+            Error::InvalidToken
         );
     }
 

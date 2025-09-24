@@ -185,7 +185,7 @@ mod tests {
             id: Set(id.clone()),
             username: Set(username),
             password: Set(Some(
-                bcrypt::hash("example".to_string(), bcrypt::DEFAULT_COST).unwrap(),
+                bcrypt::hash("example", bcrypt::DEFAULT_COST).unwrap(),
             )),
             vk_id: Set(None),
             telegram_id: Set(None),

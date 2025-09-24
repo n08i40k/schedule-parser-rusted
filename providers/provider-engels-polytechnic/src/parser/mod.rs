@@ -528,7 +528,7 @@ fn parse_name_and_subgroups(text: &str) -> Result<ParsedLessonName, Error> {
                 if result.is_none() {
                     #[cfg(not(debug_assertions))]
                     sentry::capture_message(
-                        &*format!("Не удалось угадать тип пары '{}'!", extra),
+                        &format!("Не удалось угадать тип пары '{}'!", extra),
                         sentry::Level::Warning,
                     );
 

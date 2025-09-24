@@ -2,16 +2,6 @@ use jsonwebtoken::errors::ErrorKind;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Serialize)]
-struct TokenData {
-    iis: String,
-    sub: i32,
-    app: i32,
-    exp: i32,
-    iat: i32,
-    jti: i32,
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
     sub: i32,
