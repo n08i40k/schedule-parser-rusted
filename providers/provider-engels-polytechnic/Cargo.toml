@@ -1,6 +1,6 @@
 [package]
 name = "provider-engels-polytechnic"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 
 [features]
@@ -20,7 +20,7 @@ derive_more = { version = "2.0.1", features = ["error", "display"] }
 
 utoipa = { version = "5.4.0", features = ["macros", "chrono"] }
 
-calamine = "0.30.0"
+calamine = "0.30"
 async-trait = "0.1.89"
 
 reqwest = "0.12.23"
@@ -28,5 +28,5 @@ ua_generator = "0.5.22"
 regex = "1.11.2"
 strsim = "0.11.1"
 log = "0.4.27"
-sentry = "0.42.0"
+sentry = "0.43.0"
 

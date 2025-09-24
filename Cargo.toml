@@ -3,7 +3,7 @@ members = ["actix-macros", "actix-test", "providers"]
 
 [package]
 name = "schedule-parser-rusted"
-version = "1.2.2"
+version = "1.3.0"
 edition = "2024"
 publish = false
 
@@ -21,7 +21,7 @@ actix-macros = { path = "actix-macros" }
 actix-web = "4.11.0"
 
 # basic
-chrono = { version = "0.4.41", features = ["serde"] }
+chrono = { version = "0.4.42", features = ["serde"] }
 derive_more = { version = "2.0.1", features = ["full"] }
 dotenvy = "0.15.7"
 
@@ -48,13 +48,13 @@ reqwest = { version = "0.12.23", features = ["json"] }
 mime = "0.3.17"
 
 # error handling
-sentry = "0.42.0"
-sentry-actix = "0.42.0"
+sentry = "0.43.0"
+sentry-actix = "0.43.0"
 
 # [de]serializing
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.143"
-serde_with = "3.14.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_with = "3.14"
 
 sha1 = "0.11.0-rc.2"
 
@@ -65,12 +65,12 @@ utoipa-actix-web = "0.1.2"
 
 uuid = { version = "1.18.1", features = ["v4"] }
 hex-literal = "1"
-log = "0.4.27"
+log = "0.4.28"
 
 # telegram webdata deciding and verify
 base64 = "0.22.1"
 percent-encoding = "2.3.2"
-ed25519-dalek = "3.0.0-pre.0"
+ed25519-dalek = "3.0.0-pre.1"
 
 # development tracing
 console-subscriber = { version = "0.4.1", optional = true }
