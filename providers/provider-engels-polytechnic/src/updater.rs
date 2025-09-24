@@ -46,6 +46,9 @@ pub mod error {
         /// problems with the Yandex Cloud Function invocation.
         #[display("An error occurred during the request to the Yandex Cloud API: {_0}")]
         RequestFailed(reqwest::Error),
+
+        #[display("Unable to fetch Uri in 3 retries")]
+        UriFetchFailed,
     }
 
     /// Errors that may occur during the creation of a schedule snapshot.
@@ -144,18 +147,40 @@ impl Updater {
     async fn query_url(api_key: &str, func_id: &str) -> Result<String, QueryUrlError> {
         let client = reqwest::Client::new();
 
-        let uri = client
-            .post(format!(
-                "https://functions.yandexcloud.net/{}?integration=raw",
-                func_id
-            ))
-            .header("Authorization", format!("Api-Key {}", api_key))
-            .send()
-            .await
-            .map_err(QueryUrlError::RequestFailed)?
-            .text()
-            .await
-            .map_err(QueryUrlError::RequestFailed)?;
+        let uri = {
+            let mut uri = String::new();
+            let mut counter = 0;
+
+            loop {
+                if counter == 3 {
+                    return Err(QueryUrlError::UriFetchFailed);
+                }
+
+                counter += 1;
+
+                uri = client
+                    .post(format!(
+                        "https://functions.yandexcloud.net/{}?integration=raw",
+                        func_id
+                    ))
+                    .header("Authorization", format!("Api-Key {}", api_key))
+                    .send()
+                    .await
+                    .map_err(QueryUrlError::RequestFailed)?
+                    .text()
+                    .await
+                    .map_err(QueryUrlError::RequestFailed)?;
+
+                if uri.is_empty() {
+                    log::warn!("[{}] Unable to get uri! Retrying in 5 seconds...", counter);
+                    continue;
+                }
+
+                break;
+            }
+
+            uri
+        };
 
         Ok(format!("https://politehnikum-eng.ru{}", uri.trim()))
     }
