@@ -51,9 +51,9 @@ pub mod error {
     /// Errors that may occur during the creation of a schedule snapshot.
     #[derive(Debug, Display, Error)]
     pub enum SnapshotCreationError {
-        /// The URL is the same as the one already being used (no update needed).
-        #[display("The URL is the same as the one already being used.")]
-        SameUrl,
+        /// The ETag is the same (no update needed).
+        #[display("The ETag is the same.")]
+        Same,
 
         /// The URL query for the XLS file failed to execute, either due to network issues or invalid API parameters.
         #[display("Failed to fetch URL: {_0}")]
@@ -86,10 +86,6 @@ impl Updater {
         downloader: &mut XlsDownloader,
         url: String,
     ) -> Result<ScheduleSnapshot, SnapshotCreationError> {
-        if downloader.url.as_ref().is_some_and(|_url| _url.eq(&url)) {
-            return Err(SnapshotCreationError::SameUrl);
-        }
-
         let head_result = downloader.set_url(&url).await.map_err(|error| {
             if let FetchError::Unknown(error) = &error {
                 sentry::capture_error(&error);
@@ -97,6 +93,10 @@ impl Updater {
 
             SnapshotCreationError::FetchFailed(error)
         })?;
+
+        if downloader.etag == Some(head_result.etag) {
+            return Err(SnapshotCreationError::Same);
+        }
 
         let xls_data = downloader
             .fetch(false)
@@ -249,7 +249,7 @@ impl Updater {
 
         let snapshot = match Self::new_snapshot(&mut self.downloader, url).await {
             Ok(snapshot) => snapshot,
-            Err(SnapshotCreationError::SameUrl) => {
+            Err(SnapshotCreationError::Same) => {
                 let mut clone = current_snapshot.clone();
                 clone.update();
 

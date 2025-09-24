@@ -66,25 +66,30 @@ pub struct FetchOk {
     /// Date data received.
     pub requested_at: DateTime<Utc>,
 
+    /// Etag.
+    pub etag: String,
+
     /// File data.
     pub data: Option<Vec<u8>>,
 }
 
 impl FetchOk {
     /// Result without file content.
-    pub fn head(uploaded_at: DateTime<Utc>) -> Self {
+    pub fn head(uploaded_at: DateTime<Utc>, etag: String) -> Self {
         FetchOk {
             uploaded_at,
             requested_at: Utc::now(),
+            etag,
             data: None,
         }
     }
 
     /// Full result.
-    pub fn get(uploaded_at: DateTime<Utc>, data: Vec<u8>) -> Self {
+    pub fn get(uploaded_at: DateTime<Utc>, etag: String, data: Vec<u8>) -> Self {
         FetchOk {
             uploaded_at,
             requested_at: Utc::now(),
+            etag,
             data: Some(data),
         }
     }
@@ -94,11 +99,15 @@ pub type FetchResult = Result<FetchOk, FetchError>;
 
 pub struct XlsDownloader {
     pub url: Option<String>,
+    pub etag: Option<String>,
 }
 
 impl XlsDownloader {
     pub fn new() -> Self {
-        XlsDownloader { url: None }
+        XlsDownloader {
+            url: None,
+            etag: None,
+        }
     }
 
     async fn fetch_specified(url: &str, head: bool) -> FetchResult {
@@ -124,9 +133,12 @@ impl XlsDownloader {
             .get("Content-Type")
             .ok_or(FetchError::bad_headers("Content-Type"))?;
 
-        if !headers.contains_key("etag") {
-            return Err(FetchError::bad_headers("etag"));
-        }
+        let etag = headers
+            .get("etag")
+            .ok_or(FetchError::bad_headers("etag"))?
+            .to_str()
+            .or(Err(FetchError::bad_headers("etag")))?
+            .to_string();
 
         let last_modified = headers
             .get("last-modified")
@@ -141,9 +153,13 @@ impl XlsDownloader {
             .with_timezone(&Utc);
 
         Ok(if head {
-            FetchOk::head(last_modified)
+            FetchOk::head(last_modified, etag)
         } else {
-            FetchOk::get(last_modified, response.bytes().await.unwrap().to_vec())
+            FetchOk::get(
+                last_modified,
+                etag,
+                response.bytes().await.unwrap().to_vec(),
+            )
         })
     }
 
