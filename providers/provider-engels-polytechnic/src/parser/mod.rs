@@ -233,6 +233,7 @@ enum LessonParseResult {
 fn guess_lesson_type(text: &str) -> Option<LessonType> {
     static MAP: LazyLock<HashMap<&str, LessonType>> = LazyLock::new(|| {
         HashMap::from([
+            ("о важном", LessonType::Additional),
             ("консультация", LessonType::Consultation),
             ("самостоятельная работа", LessonType::IndependentWork),
             ("зачет", LessonType::Exam),
@@ -427,127 +428,128 @@ fn parse_name_and_subgroups(text: &str) -> Result<ParsedLessonName, Error> {
     // 3. "Модификатор" (чаще всего).
     //
     // Регулярное выражение для получения ФИО преподавателей и номеров подгрупп (aka. второй части).
-    // (?:[А-Я][а-я]+\s?(?:[А-Я][\s.]*){2}(?:\(\d\s?[а-я]+\))?(?:, )?)+[\s.]*
-    //
-    // Подробнее:
-    // (?:
-    //     [А-Я][а-я]+         - Фамилия.
-    //     \s?                 - Кто знает, будет ли там пробел.
-    //     (?:[А-Я][\s.]*){2}  - Имя и отчество с учётом случайных пробелов и точек.
-    //     (?:
-    //         \(              - Открытие подгруппы.
-    //         \s?             - Кто знает, будет ли там пробел.
-    //         \d              - Номер подгруппы.
-    //         \s?             - Кто знает, будет ли там пробел.
-    //         [а-я\s]+        - Слово "подгруппа" с учётов ошибок.
-    //         \)              - Закрытие подгруппы.
-    //     )?                  - Явное указание подгруппы может отсутствовать по понятным причинам.
-    //     (?:, )?             - Разделители между отдельными частями.
-    // )+
-    // [\s.]*                  - Забираем с собой всякий мусор, что бы не передать его в третью часть.
-
-    static NAMES_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(
-            r"(?:[А-Я][а-я]+\s?(?:[А-Я][\s.]*){2}(?:\(?\s*\d\s*[а-я\s]+\)?)?(?:[\s,.]+)?){1,2}+[\s.,]*",
+    static NAME_RE: LazyLock<fancy_regex::Regex> = LazyLock::new(|| {
+        fancy_regex::Regex::new(
+            r"([А-Я][а-я]+(?:[\s.]*[А-Я]){1,2})(?=[^а-я])[.\s]*(?:\(?(\d)[\sа-я]*\)?)?",
         )
-            .unwrap()
+        .unwrap()
     });
 
-    // Отчистка
-    static CLEAN_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[\s\n\t]+").unwrap());
+    let text = text
+        .chars()
+        .filter(|c: &char| {
+            c.is_whitespace()
+                || c.is_ascii_digit()
+                || (*c >= 'а' && *c <= 'я')
+                || (*c >= 'А' && *c <= 'Я')
+                || *c == '.'
+                || *c == '-'
+        })
+        .collect::<String>()
+        .replace(r"\s+", " ");
 
-    let text = CLEAN_RE
-        .replace(&text.replace([' ', '\t', '\n'], " ").replace(",", ""), " ")
-        .to_string();
+    let mut lesson_name: Option<&str> = None;
+    let mut extra: Option<&str> = None;
 
-    let (lesson_name, subgroups, lesson_type) = match NAMES_REGEX.captures(&text) {
-        Some(captures) => {
-            let capture = captures.get(0).unwrap();
+    let mut shared_subgroup = false;
+    let mut subgroups: [Option<LessonSubGroup>; 2] = [None, None];
 
-            let subgroups: Vec<Option<LessonSubGroup>> = {
-                let src = capture.as_str().replace([' ', '.'], "");
+    for capture in NAME_RE.captures_iter(&text) {
+        let capture = capture.unwrap();
 
-                let mut shared_subgroup = false;
-                let mut subgroups: [Option<LessonSubGroup>; 2] = [None, None];
-
-                for name in src.split(',') {
-                    let digit_index = name.find(|c: char| c.is_ascii_digit());
-
-                    let number: u8 =
-                        digit_index.map_or(0, |index| name[(index)..(index + 1)].parse().unwrap());
-
-                    let teacher_name = {
-                        let name_end = name
-                            .find(|c: char| !c.is_alphabetic())
-                            .unwrap_or(name.len());
-
-                        // Я ебал. Как же я долго до этого доходил.
-                        format!(
-                            "{} {}.{}.",
-                            name.get(..name_end - 4).unwrap(),
-                            name.get(name_end - 4..name_end - 2).unwrap(),
-                            name.get(name_end - 2..name_end).unwrap(),
-                        )
-                    };
-
-                    let lesson = Some(LessonSubGroup {
-                        cabinet: None,
-                        teacher: Some(teacher_name),
-                    });
-
-                    match number {
-                        0 => {
-                            subgroups[0] = lesson;
-                            subgroups[1] = None;
-                            shared_subgroup = true;
-                            break;
-                        }
-                        num => {
-                            // 1 - 1 = 0 | 2 - 1 = 1 | 3 - 1 = 2 (schedule index to array index)
-                            // 0 % 2 = 0 | 1 % 2 = 1 | 2 % 2 = 0 (clamp)
-                            let normalised = (num - 1) % 2;
-
-                            subgroups[normalised as usize] = lesson;
-                        }
-                    }
-                }
-
-                if shared_subgroup {
-                    Vec::from([subgroups[0].take()])
-                } else {
-                    Vec::from(subgroups)
-                }
-            };
-
-            let name = text[..capture.start()].trim().to_string();
-            let extra = text[capture.end()..].trim().to_string();
-
-            let lesson_type = if extra.len() > 4 {
-                let result = guess_lesson_type(&extra);
-
-                if result.is_none() {
-                    #[cfg(not(debug_assertions))]
-                    sentry::capture_message(
-                        &format!("Не удалось угадать тип пары '{}'!", extra),
-                        sentry::Level::Warning,
-                    );
-
-                    #[cfg(debug_assertions)]
-                    log::warn!("Не удалось угадать тип пары '{}'!", extra);
-                }
-
-                result
-            } else {
-                None
-            };
-
-            (name, subgroups, lesson_type)
+        if lesson_name.is_none() {
+            lesson_name = Some(&text[..capture.get(0).unwrap().start()]);
         }
-        None => (text, Vec::new(), None),
+
+        extra = Some(&text[capture.get(0).unwrap().end()..]);
+
+        let teacher_name = {
+            let clean = capture
+                .get(1)
+                .unwrap()
+                .as_str()
+                .chars()
+                .filter(|c| c.is_alphabetic())
+                .collect::<Vec<char>>();
+
+            if clean.get(clean.len() - 2).is_some_and(|c| c.is_uppercase()) {
+                let (name, remaining) = clean.split_at(clean.len() - 2);
+                format!(
+                    "{} {}.{}.",
+                    name.iter().collect::<String>(),
+                    remaining[0],
+                    remaining[1]
+                )
+            } else {
+                let (remaining, name) = clean.split_last().unwrap();
+                format!("{} {}.", name.iter().collect::<String>(), remaining)
+            }
+        };
+
+        let subgroup_index = capture
+            .get(2)
+            .and_then(|m| Some(m.as_str().parse::<u32>().unwrap()));
+
+        let subgroup = Some(LessonSubGroup {
+            cabinet: None,
+            teacher: Some(teacher_name),
+        });
+
+        match subgroup_index {
+            None => {
+                subgroups[0] = subgroup;
+                subgroups[1] = None;
+                shared_subgroup = true;
+                break;
+            }
+            Some(num) => {
+                // 1 - 1 = 0 | 2 - 1 = 1 | 3 - 1 = 2 (schedule index to array index)
+                // 0 % 2 = 0 | 1 % 2 = 1 | 2 % 2 = 0 (clamp)
+                let normalised = (num - 1) % 2;
+
+                subgroups[normalised as usize] = subgroup;
+            }
+        }
+    }
+
+    let subgroups = if lesson_name.is_none() {
+        Vec::new()
+    } else if shared_subgroup {
+        Vec::from([subgroups[0].take()])
+    } else {
+        Vec::from(subgroups)
+    };
+
+    if extra.is_none() {
+        extra = text
+            .rfind(" ")
+            .and_then(|i| text[..i].rfind(" "))
+            .map(|i| &text[i + 1..]);
+    }
+
+    let lesson_type = if let Some(extra) = extra
+        && extra.len() > 4
+    {
+        let result = guess_lesson_type(&extra);
+
+        if result.is_none() {
+            #[cfg(not(debug_assertions))]
+            sentry::capture_message(
+                &format!("Не удалось угадать тип пары '{}'!", extra),
+                sentry::Level::Warning,
+            );
+
+            #[cfg(debug_assertions)]
+            log::warn!("Не удалось угадать тип пары '{}'!", extra);
+        }
+
+        result
+    } else {
+        None
     };
 
     Ok(ParsedLessonName {
-        name: lesson_name,
+        name: lesson_name.unwrap_or(&text).to_string(),
         subgroups,
         r#type: lesson_type,
     })
