@@ -69,9 +69,6 @@ impl ScheduleProvider for Wrapper {
 
                         Err(err) => {
                             sentry::capture_error(&err);
-
-                            cancellation_token.cancel();
-                            return Err(err.into());
                         }
                     }
                 }
