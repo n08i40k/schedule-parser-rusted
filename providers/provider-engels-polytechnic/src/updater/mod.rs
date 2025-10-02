@@ -1,7 +1,8 @@
+pub use self::error::{Error, Result};
 use crate::parser::parse_xls;
-use crate::updater::error::{Error, QueryUrlError, SnapshotCreationError};
 use crate::xls_downloader::{FetchError, XlsDownloader};
 use base::ScheduleSnapshot;
+mod error;
 
 pub enum UpdateSource {
     Prepared(ScheduleSnapshot),
@@ -19,59 +20,6 @@ pub struct Updater {
     update_source: UpdateSource,
 }
 
-pub mod error {
-    use crate::xls_downloader::FetchError;
-    use derive_more::{Display, Error};
-
-    #[derive(Debug, Display, Error)]
-    pub enum Error {
-        /// An error occurred while querying the Yandex Cloud API for a URL.
-        ///
-        /// This may result from network failures, invalid API credentials, or issues with the Yandex Cloud Function invocation.
-        /// See [`QueryUrlError`] for more details about specific causes.
-        QueryUrlFailed(QueryUrlError),
-
-        /// The schedule snapshot creation process failed.
-        ///
-        /// This can happen due to URL conflicts (same URL already in use), failed network requests,
-        /// download errors, or invalid XLS file content. See [`SnapshotCreationError`] for details.
-        SnapshotCreationFailed(SnapshotCreationError),
-    }
-    /// Errors that may occur when querying the Yandex Cloud API to retrieve a URL.
-    #[derive(Debug, Display, Error)]
-    pub enum QueryUrlError {
-        /// Occurs when the request to the Yandex Cloud API fails.
-        ///
-        /// This may be due to network issues, invalid API key, incorrect function ID, or other
-        /// problems with the Yandex Cloud Function invocation.
-        #[display("An error occurred during the request to the Yandex Cloud API: {_0}")]
-        RequestFailed(reqwest::Error),
-
-        #[display("Unable to fetch Uri in 3 retries")]
-        UriFetchFailed,
-    }
-
-    /// Errors that may occur during the creation of a schedule snapshot.
-    #[derive(Debug, Display, Error)]
-    pub enum SnapshotCreationError {
-        /// The ETag is the same (no update needed).
-        #[display("The ETag is the same.")]
-        Same,
-
-        /// The URL query for the XLS file failed to execute, either due to network issues or invalid API parameters.
-        #[display("Failed to fetch URL: {_0}")]
-        FetchFailed(FetchError),
-
-        /// Downloading the XLS file content failed after successfully obtaining the URL.
-        #[display("Download failed: {_0}")]
-        DownloadFailed(FetchError),
-
-        /// The XLS file could not be parsed into a valid schedule format.
-        #[display("Schedule data is invalid: {_0}")]
-        InvalidSchedule(crate::parser::error::Error),
-    }
-}
-
 impl Updater {
     /// Constructs a new `ScheduleSnapshot` by downloading and parsing schedule data from the specified URL.
     ///
@@ -85,40 +33,33 @@ impl Updater {
     /// * `url`: The source URL pointing to the XLS file containing schedule data.
     ///
     /// returns: Result<ScheduleSnapshot, SnapshotCreationError>
-    pub async fn new_snapshot(
-        downloader: &mut XlsDownloader,
-        url: String,
-    ) -> Result<ScheduleSnapshot, SnapshotCreationError> {
+    async fn new_snapshot(downloader: &mut XlsDownloader, url: String) -> Result<ScheduleSnapshot> {
         let head_result = downloader.set_url(&url).await.map_err(|error| {
-            if let FetchError::Unknown(error) = &error {
+            if let FetchError::Reqwest(error) = &error {
                 sentry::capture_error(&error);
             }
 
-            SnapshotCreationError::FetchFailed(error)
+            Error::ScheduleFetchFailed(error)
         })?;
 
         if downloader.etag == Some(head_result.etag) {
-            return Err(SnapshotCreationError::Same);
+            return Err(Error::SameETag);
         }
 
         let xls_data = downloader
             .fetch(false)
             .await
             .map_err(|error| {
-                if let FetchError::Unknown(error) = &error {
+                if let FetchError::Reqwest(error) = &error {
                     sentry::capture_error(&error);
                 }
 
-                SnapshotCreationError::DownloadFailed(error)
+                Error::ScheduleDownloadFailed(error)
             })?
             .data
             .unwrap();
 
-        let parse_result = parse_xls(&xls_data).map_err(|error| {
-            sentry::capture_error(&error);
-
-            SnapshotCreationError::InvalidSchedule(error)
-        })?;
+        let parse_result = parse_xls(&xls_data)?;
 
         Ok(ScheduleSnapshot {
             fetched_at: head_result.requested_at,
@@ -144,7 +85,7 @@ impl Updater {
     /// Result containing:
     /// - `Ok(String)` - Complete URL constructed from the Function's response
     /// - `Err(QueryUrlError)` - If the request or response processing fails
-    async fn query_url(api_key: &str, func_id: &str) -> Result<String, QueryUrlError> {
+    async fn query_url(api_key: &str, func_id: &str) -> Result<String> {
         let client = reqwest::Client::new();
 
         let uri = {
@@ -156,7 +97,7 @@ impl Updater {
 
             loop {
                 if counter == 3 {
-                    return Err(QueryUrlError::UriFetchFailed);
+                    return Err(Error::EmptyUri);
                 }
 
                 counter += 1;
@@ -169,10 +110,10 @@ impl Updater {
                     .header("Authorization", format!("Api-Key {}", api_key))
                     .send()
                     .await
-                    .map_err(QueryUrlError::RequestFailed)?
+                    .map_err(Error::Reqwest)?
                     .text()
                     .await
-                    .map_err(QueryUrlError::RequestFailed)?;
+                    .map_err(Error::Reqwest)?;
 
                 if uri.is_empty() {
                     log::warn!("[{}] Unable to get uri! Retrying in 5 seconds...", counter);
@@ -201,7 +142,7 @@ impl Updater {
     /// Returns `Ok(())` if the snapshot was successfully initialized, or an `Error` if:
     /// - URL query to Yandex Cloud failed ([`QueryUrlError`])
     /// - Schedule snapshot creation failed ([`SnapshotCreationError`])
-    pub async fn new(update_source: UpdateSource) -> Result<(Self, ScheduleSnapshot), Error> {
+    pub async fn new(update_source: UpdateSource) -> Result<(Self, ScheduleSnapshot)> {
         let mut this = Updater {
             downloader: XlsDownloader::new(),
             update_source,
@@ -222,19 +163,14 @@ impl Updater {
                 yandex_func_id,
             } => {
                 log::info!("Obtaining a link using FaaS...");
-                Self::query_url(yandex_api_key, yandex_func_id)
-                    .await
-                    .map_err(Error::QueryUrlFailed)?
+                Self::query_url(yandex_api_key, yandex_func_id).await?
             }
             _ => unreachable!(),
         };
 
         log::info!("For the initial setup, a link {} will be used", url);
 
-        let snapshot = Self::new_snapshot(&mut this.downloader, url)
-            .await
-            .map_err(Error::SnapshotCreationFailed)?;
-
+        let snapshot = Self::new_snapshot(&mut this.downloader, url).await?;
         log::info!("Schedule snapshot successfully created!");
 
         Ok((this, snapshot))
@@ -257,7 +193,7 @@ impl Updater {
     pub async fn update(
         &mut self,
         current_snapshot: &ScheduleSnapshot,
-    ) -> Result<ScheduleSnapshot, Error> {
+    ) -> Result<ScheduleSnapshot> {
         if let UpdateSource::Prepared(snapshot) = &self.update_source {
             let mut snapshot = snapshot.clone();
             snapshot.update();
@@ -269,21 +205,19 @@ impl Updater {
             UpdateSource::GrabFromSite {
                 yandex_api_key,
                 yandex_func_id,
-            } => Self::query_url(yandex_api_key.as_str(), yandex_func_id.as_str())
-                .await
-                .map_err(Error::QueryUrlFailed)?,
+            } => Self::query_url(yandex_api_key.as_str(), yandex_func_id.as_str()).await?,
             _ => unreachable!(),
         };
 
         let snapshot = match Self::new_snapshot(&mut self.downloader, url).await {
             Ok(snapshot) => snapshot,
-            Err(SnapshotCreationError::Same) => {
+            Err(Error::SameETag) => {
                 let mut clone = current_snapshot.clone();
                 clone.update();
 
                 clone
             }
-            Err(error) => return Err(Error::SnapshotCreationFailed(error)),
+            Err(error) => return Err(error),
         };
 
         Ok(snapshot)

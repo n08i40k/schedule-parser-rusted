@@ -14,7 +14,7 @@ pub enum FetchError {
     /// Unknown error.
     #[display("An unknown error occurred while downloading the file.")]
     #[schema(value_type = String)]
-    Unknown(Arc<reqwest::Error>),
+    Reqwest(Arc<reqwest::Error>),
 
     /// Server returned a status code different from 200.
     #[display("Server returned a status code {status_code}.")]
@@ -31,7 +31,7 @@ pub enum FetchError {
 
 impl FetchError {
     pub fn unknown(error: Arc<reqwest::Error>) -> Self {
-        Self::Unknown(error)
+        Self::Reqwest(error)
     }
 
     pub fn bad_status_code(status_code: u16) -> Self {

@@ -1,6 +1,6 @@
 [package]
 name = "provider-engels-polytechnic"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2024"
 
 [features]
@@ -14,9 +14,7 @@ tokio-util = "0.7.16"
 
 chrono = { version = "0.4.41", features = ["serde"] }
 
-serde = { version = "1.0.219", features = ["derive"] }
-
-derive_more = { version = "2.0.1", features = ["error", "display"] }
+derive_more = { version = "2.0.1", features = ["error", "display", "from"] }
 
 utoipa = { version = "5.4.0", features = ["macros", "chrono"] }
 

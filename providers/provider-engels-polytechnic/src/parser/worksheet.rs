@@ -1,3 +1,4 @@
+use derive_more::Display;
 use regex::Regex;
 use std::ops::Deref;
 use std::sync::LazyLock;
@@ -6,6 +7,18 @@ use std::sync::LazyLock;
 pub struct WorkSheet {
     pub data: calamine::Range<calamine::Data>,
     pub merges: Vec<calamine::Dimensions>,
+}
+
+#[derive(Clone, Debug, Display, derive_more::Error)]
+#[display("row {row}, column {column}")]
+pub struct CellPos {
+    pub row: u32,
+    pub column: u32,
+}
+
+pub struct CellRange {
+    pub start: CellPos,
+    pub end: CellPos,
 }
 
 impl Deref for WorkSheet {
@@ -45,14 +58,26 @@ impl WorkSheet {
     }
 
     /// Obtaining the boundaries of the cell along its upper left coordinate.
-    pub fn get_merge_from_start(&self, row: u32, column: u32) -> ((u32, u32), (u32, u32)) {
+    pub fn get_merge_from_start(&self, row: u32, column: u32) -> CellRange {
         match self
             .merges
             .iter()
             .find(|merge| merge.start.0 == row && merge.start.1 == column)
         {
-            Some(merge) => (merge.start, (merge.end.0 + 1, merge.end.1 + 1)),
-            None => ((row, column), (row + 1, column + 1)),
+            Some(merge) => CellRange {
+                start: CellPos::new(merge.start.0, merge.start.1),
+                end: CellPos::new(merge.end.0 + 1, merge.end.1 + 1),
+            },
+            None => CellRange {
+                start: CellPos::new(row, column),
+                end: CellPos::new(row + 1, column + 1),
+            },
         }
+    }
+}
+
+impl CellPos {
+    pub fn new(row: u32, column: u32) -> Self {
+        Self { row, column }
     }
 }
