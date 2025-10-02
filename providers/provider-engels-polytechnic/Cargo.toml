@@ -1,6 +1,6 @@
 [package]
 name = "provider-engels-polytechnic"
-version = "0.2.0"
+version = "0.2.2"
 edition = "2024"
 
 [features]
