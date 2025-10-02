@@ -41,7 +41,7 @@ jobs:
 
       - name: Test
         run: |
-          cargo test --verbose
+          cargo test
         env:
           DATABASE_URL: ${{ env.TEST_DB }}
           SCHEDULE_DISABLE_AUTO_UPDATE: 1
@@ -68,7 +68,7 @@ jobs:
           toolchain: stable
 
       - name: Build
-        run: cargo build --release --verbose
+        run: cargo build --release
 
       - name: Extract debug symbols
         run: |
