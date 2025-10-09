@@ -398,10 +398,10 @@ fn parse_name_and_subgroups(text: &str, row: u32, column: u32) -> Result<ParsedL
     let mut lesson_name: Option<&str> = None;
     let mut extra: Option<&str> = None;
 
-    let mut shared_subgroup = false;
+    let mut shared_subgroup = true;
     let mut subgroups: [Option<LessonSubGroup>; 2] = [None, None];
 
-    for capture in NAME_RE.captures_iter(&text) {
+    for capture in NAME_RE.captures_iter(&text).take(2) {
         let capture = capture.unwrap();
 
         if lesson_name.is_none() {
@@ -442,17 +442,23 @@ fn parse_name_and_subgroups(text: &str, row: u32, column: u32) -> Result<ParsedL
 
         match subgroup_index {
             None => {
-                subgroups[0] = subgroup;
-                subgroups[1] = None;
-                shared_subgroup = true;
-                break;
+                // we have only 2 matches max so more than 2 subgroups we cant have 100%
+                *subgroups.iter_mut().find(|x| x.is_none()).unwrap() = subgroup;
             }
             Some(num) => {
+                // bc we have indexed subgroup
+                shared_subgroup = false;
+
                 // 1 - 1 = 0 | 2 - 1 = 1 | 3 - 1 = 2 (schedule index to array index)
                 // 0 % 2 = 0 | 1 % 2 = 1 | 2 % 2 = 0 (clamp)
-                let normalised = (num - 1) % 2;
+                let subgroup_index = ((num - 1) % 2) as usize;
 
-                subgroups[normalised as usize] = subgroup;
+                // if we have subgroup in that index (probably non-indexed, we change it index to free)
+                if subgroups[subgroup_index].is_some() {
+                    subgroups.swap(0, 1);
+                }
+
+                subgroups[subgroup_index] = subgroup;
             }
         }
     }
@@ -460,7 +466,7 @@ fn parse_name_and_subgroups(text: &str, row: u32, column: u32) -> Result<ParsedL
     let subgroups = if lesson_name.is_none() {
         Vec::new()
     } else if shared_subgroup {
-        Vec::from([subgroups[0].take()])
+        Vec::from([subgroups.into_iter().next().unwrap()])
     } else {
         Vec::from(subgroups)
     };
