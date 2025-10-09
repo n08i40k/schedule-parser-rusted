@@ -377,7 +377,7 @@ fn parse_name_and_subgroups(text: &str, row: u32, column: u32) -> Result<ParsedL
     // Регулярное выражение для получения ФИО преподавателей и номеров подгрупп (aka. второй части).
     static NAME_RE: LazyLock<fancy_regex::Regex> = LazyLock::new(|| {
         fancy_regex::Regex::new(
-            r"([А-Я][а-я]+(?:[\s.]*[А-Я]){1,2})(?=[^а-я])[.\s]*(?:\(?(\d)[\sа-я]*\)?)?",
+            r"([А-Я][а-я]+(?:[\s.]*[А-Я]){1,2})(?=[^А-Яа-я])[.\s]*(?:\(?(\d)[\sа-я]*\)?)?",
         )
         .unwrap()
     });
