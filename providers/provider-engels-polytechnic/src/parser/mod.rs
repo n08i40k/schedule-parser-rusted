@@ -1,6 +1,5 @@
 pub use self::error::{Error, Result};
 use crate::or_continue;
-use crate::parser::error::ErrorCell;
 use crate::parser::worksheet::{CellPos, CellRange, WorkSheet};
 use crate::parser::LessonParseResult::{Lessons, Street};
 use base::LessonType::Break;
@@ -548,9 +547,8 @@ fn parse_day_boundaries(
             continue;
         };
 
-        let lesson_time = parse_lesson_boundaries_cell(&time_cell, date).ok_or(
-            Error::NoLessonBoundaries(ErrorCell::new(row, column, &time_cell)),
-        )?;
+        let lesson_time = parse_lesson_boundaries_cell(&time_cell, date)
+            .ok_or(Error::NoLessonBoundaries(CellPos::new(row, column)))?;
 
         // type
         let lesson_type = if time_cell.contains("пара") {

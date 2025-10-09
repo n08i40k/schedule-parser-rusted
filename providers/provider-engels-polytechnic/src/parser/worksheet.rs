@@ -1,5 +1,5 @@
-use derive_more::Display;
 use regex::Regex;
+use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::sync::LazyLock;
 
@@ -9,11 +9,33 @@ pub struct WorkSheet {
     pub merges: Vec<calamine::Dimensions>,
 }
 
-#[derive(Clone, Debug, Display, derive_more::Error)]
-#[display("row {row}, column {column}")]
+#[derive(Clone, Debug, derive_more::Error)]
 pub struct CellPos {
     pub row: u32,
     pub column: u32,
+}
+
+fn format_column_index(index: u32) -> String {
+    // https://stackoverflow.com/a/297214
+    let quotient = index / 26;
+
+    let char = char::from((65 + (index % 26)) as u8);
+
+    if quotient > 0 {
+        return format!("{}{}", format_column_index(quotient - 1), char);
+    }
+
+    return char.to_string();
+}
+
+impl Display for CellPos {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "column {}, row {}",
+            format_column_index(self.column),
+            self.row + 1,
+        ))
+    }
 }
 
 pub struct CellRange {
