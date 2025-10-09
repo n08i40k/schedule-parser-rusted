@@ -225,12 +225,17 @@ fn parse_lesson(
         cell_data
     };
 
-    let cell_range = worksheet.get_merge_from_start(row, group_column);
+    let lesson_cell_range = worksheet.get_merge_from_start(row, group_column);
 
     let (default_range, lesson_time) = {
         let end_time_arr = day_boundaries
             .iter()
-            .filter(|time| time.range.end.row == cell_range.end.row)
+            .filter(
+                |BoundariesData {
+                     range: CellRange { end, .. },
+                     ..
+                 }| { lesson_cell_range.end.row <= end.row },
+            )
             .collect::<Vec<&BoundariesData>>();
 
         let end_time = end_time_arr
@@ -261,7 +266,7 @@ fn parse_lesson(
     {
         let cabinets: Vec<String> = parse_cabinets(
             worksheet,
-            (cell_range.start.row, cell_range.end.row),
+            (lesson_cell_range.start.row, lesson_cell_range.end.row),
             group_column + 1,
         );
 
