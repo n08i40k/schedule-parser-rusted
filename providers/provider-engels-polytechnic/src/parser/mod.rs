@@ -216,7 +216,7 @@ fn parse_lesson(
         };
 
         static OTHER_STREET_RE: LazyLock<Regex> =
-            LazyLock::new(|| Regex::new(r"^[А-Я][а-я]+[,\s]\d+$").unwrap());
+            LazyLock::new(|| Regex::new(r"^[А-Я][а-я]+[,\s]+д\.\s\d+$").unwrap());
 
         if OTHER_STREET_RE.is_match(&cell_data) {
             return Ok(Street(cell_data));
