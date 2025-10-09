@@ -100,9 +100,9 @@ pub enum LessonType {
 
     /// Защита курсового проекта.
     CourseProjectDefense,
-    
+
     /// Практическое занятие.
-    Practice
+    Practice,
 }
 
 #[derive(Clone, Hash, Debug, Serialize, Deserialize, ToSchema)]
@@ -211,70 +211,6 @@ impl ScheduleSnapshot {
         self.fetched_at = Utc::now();
     }
 }
-
-// #[derive(Clone, Debug, Display, Error, ToSchema)]
-// #[display("row {row}, column {column}")]
-// pub struct ErrorCellPos {
-//     pub row: u32,
-//     pub column: u32,
-// }
-//
-// #[derive(Clone, Debug, Display, Error, ToSchema)]
-// #[display("'{data}' at {pos}")]
-// pub struct ErrorCell {
-//     pub pos: ErrorCellPos,
-//     pub data: String,
-// }
-//
-// impl ErrorCell {
-//     pub fn new(row: u32, column: u32, data: String) -> Self {
-//         Self {
-//             pos: ErrorCellPos { row, column },
-//             data,
-//         }
-//     }
-// }
-
-// #[derive(Clone, Debug, Display, Error, ToSchema)]
-// pub enum ParseError {
-//     /// Errors related to reading XLS file.
-//     #[display("{_0:?}: Failed to read XLS file.")]
-//     #[schema(value_type = String)]
-//     BadXLS(Arc<calamine::XlsError>),
-//
-//     /// Not a single sheet was found.
-//     #[display("No work sheets found.")]
-//     NoWorkSheets,
-//
-//     /// There are no data on the boundaries of the sheet.
-//     #[display("There is no data on work sheet boundaries.")]
-//     UnknownWorkSheetRange,
-//
-//     /// Failed to read the beginning and end of the lesson from the cell
-//     #[display("Failed to read lesson start and end from {_0}.")]
-//     LessonBoundaries(ErrorCell),
-//
-//     /// Not found the beginning and the end corresponding to the lesson.
-//     #[display("No start and end times matching the lesson (at {_0}) was found.")]
-//     LessonTimeNotFound(ErrorCellPos),
-// }
-//
-// impl Serialize for ParseError {
-//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//     where
-//         S: Serializer,
-//     {
-//         match self {
-//             ParseError::BadXLS(_) => serializer.serialize_str("BAD_XLS"),
-//             ParseError::NoWorkSheets => serializer.serialize_str("NO_WORK_SHEETS"),
-//             ParseError::UnknownWorkSheetRange => {
-//                 serializer.serialize_str("UNKNOWN_WORK_SHEET_RANGE")
-//             }
-//             ParseError::LessonBoundaries(_) => serializer.serialize_str("GLOBAL_TIME"),
-//             ParseError::LessonTimeNotFound(_) => serializer.serialize_str("LESSON_TIME_NOT_FOUND"),
-//         }
-//     }
-// }
 
 #[async_trait]
 pub trait ScheduleProvider
