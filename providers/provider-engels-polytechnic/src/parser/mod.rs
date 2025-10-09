@@ -485,13 +485,10 @@ fn parse_name_and_subgroups(text: &str, row: u32, column: u32) -> Result<ParsedL
 
         if result.is_none() {
             #[cfg(not(debug_assertions))]
-            sentry::capture_message(
-                &Error::UnknownLessonType {
-                    r#type: extra.to_string(),
-                    pos: CellPos::new(row, column),
-                },
-                sentry::Level::Warning,
-            );
+            sentry::capture_error(&Error::UnknownLessonType {
+                r#type: extra.to_string(),
+                pos: CellPos::new(row, column),
+            });
 
             #[cfg(debug_assertions)]
             log::warn!(
