@@ -256,7 +256,7 @@ fn parse_lesson(
         name,
         mut subgroups,
         r#type: lesson_type,
-    } = parse_name_and_subgroups(&name)?;
+    } = parse_name_and_subgroups(&name, row, group_column)?;
 
     {
         let cabinets: Vec<String> = parse_cabinets(
@@ -363,7 +363,7 @@ struct ParsedLessonName {
 
 //noinspection GrazieInspection
 /// Getting the "pure" name of the lesson and list of teachers from the text of the lesson cell.
-fn parse_name_and_subgroups(text: &str) -> Result<ParsedLessonName> {
+fn parse_name_and_subgroups(text: &str, row: u32, column: u32) -> Result<ParsedLessonName> {
     // Части названия пары:
     // 1. Само название.
     // 2. Список преподавателей и подгрупп.
@@ -475,12 +475,21 @@ fn parse_name_and_subgroups(text: &str) -> Result<ParsedLessonName> {
         if result.is_none() {
             #[cfg(not(debug_assertions))]
             sentry::capture_message(
-                &format!("Не удалось угадать тип пары '{}'!", extra),
+                &Error::UnknownLessonType {
+                    r#type: extra.to_string(),
+                    pos: CellPos::new(row, column),
+                },
                 sentry::Level::Warning,
             );
 
             #[cfg(debug_assertions)]
-            log::warn!("Не удалось угадать тип пары '{}'!", extra);
+            log::warn!(
+                "{}",
+                Error::UnknownLessonType {
+                    r#type: extra.to_string(),
+                    pos: CellPos::new(row, column),
+                }
+            );
         }
 
         result

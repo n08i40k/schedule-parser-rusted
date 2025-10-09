@@ -17,6 +17,9 @@ pub enum Error {
 
     #[display("No start and end times matching the lesson (at {_0}) was found.")]
     LessonTimeNotFound(CellPos),
+
+    #[display("Unknown lesson type `{type}` at {pos}")]
+    UnknownLessonType { pos: CellPos, r#type: String },
 }
 
 pub type Result<T> = core::result::Result<T, Error>;
