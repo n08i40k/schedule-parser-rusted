@@ -51,6 +51,8 @@ macro_rules! define_find_by {
 }
 
 impl Query {
+    // User
+
     define_find_by!(user, id, str, Id);
     define_find_by!(user, telegram_id, i64, TelegramId);
     define_find_by!(user, vk_id, i32, VkId);
@@ -60,4 +62,12 @@ impl Query {
     define_is_exists!(user, username, str, Username);
     define_is_exists!(user, telegram_id, i64, TelegramId);
     define_is_exists!(user, vk_id, i32, VkId);
+
+    // Service user
+
+    define_find_by!(service_user, id, str, Id);
+    define_find_by!(service_user, name, str, Name);
+
+    define_is_exists!(service_user, id, str, Id);
+    define_is_exists!(service_user, name, str, Name);
 }
