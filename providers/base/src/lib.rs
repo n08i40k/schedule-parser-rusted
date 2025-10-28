@@ -103,6 +103,9 @@ pub enum LessonType {
 
     /// Практическое занятие.
     Practice,
+
+    /// Дифференцированный зачёт.
+    DifferentiatedExam,
 }
 
 #[derive(Clone, Hash, Debug, Serialize, Deserialize, ToSchema)]

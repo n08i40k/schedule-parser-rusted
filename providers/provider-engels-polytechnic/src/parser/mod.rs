@@ -187,6 +187,7 @@ fn guess_lesson_type(text: &str) -> Option<LessonType> {
             ("курсовой проект", LessonType::CourseProject),
             ("защита курсового проекта", LessonType::CourseProjectDefense),
             ("практическое занятие", LessonType::Practice),
+            ("дифференцированный зачет", LessonType::DifferentiatedExam),
         ])
     });
 
