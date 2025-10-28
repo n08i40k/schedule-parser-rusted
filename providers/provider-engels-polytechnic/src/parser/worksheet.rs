@@ -25,7 +25,7 @@ fn format_column_index(index: u32) -> String {
         return format!("{}{}", format_column_index(quotient - 1), char);
     }
 
-    return char.to_string();
+    char.to_string()
 }
 
 impl Display for CellPos {

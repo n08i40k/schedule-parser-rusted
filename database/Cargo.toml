@@ -9,3 +9,4 @@ entity = { path = "entity" }
 sea-orm = { version = "2.0.0-rc.15", features = ["sqlx-postgres", "runtime-tokio"] }
 
 paste = "1"
+serde = { version = "1", features = ["derive"] }

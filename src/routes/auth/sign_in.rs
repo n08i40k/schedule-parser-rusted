@@ -7,6 +7,7 @@ use crate::{utility, AppState};
 use actix_web::{post, web};
 use database::query::Query;
 use web::Json;
+use database::entity::UserType;
 
 async fn sign_in_combined(
     data: SignInData,
@@ -40,7 +41,7 @@ async fn sign_in_combined(
                 }
             }
 
-            let access_token = utility::jwt::encode(&user.id);
+            let access_token = utility::jwt::encode(UserType::Default, &user.id);
             Ok(UserResponse::from_user_with_token(user, access_token))
         }
 
@@ -184,9 +185,7 @@ mod tests {
         let active_user = ActiveUser {
             id: Set(id.clone()),
             username: Set(username),
-            password: Set(Some(
-                bcrypt::hash("example", bcrypt::DEFAULT_COST).unwrap(),
-            )),
+            password: Set(Some(bcrypt::hash("example", bcrypt::DEFAULT_COST).unwrap())),
             vk_id: Set(None),
             telegram_id: Set(None),
             group: Set(Some("ИС-214/23".to_string())),

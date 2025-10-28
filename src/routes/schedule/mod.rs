@@ -1,5 +1,6 @@
 mod cache_status;
 mod group;
+mod group_by_name;
 mod group_names;
 mod get;
 mod schema;
@@ -8,6 +9,7 @@ mod teacher_names;
 
 pub use cache_status::*;
 pub use group::*;
+pub use group_by_name::*;
 pub use group_names::*;
 pub use get::*;
 pub use teacher::*;

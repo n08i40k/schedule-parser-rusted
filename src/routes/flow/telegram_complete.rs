@@ -58,10 +58,7 @@ pub async fn telegram_complete(
 
     active_user.group = Set(Some(data.group));
 
-    active_user
-        .update(db)
-        .await
-        .expect("Failed to update user");
+    active_user.update(db).await.expect("Failed to update user");
 
     Ok(()).into()
 }

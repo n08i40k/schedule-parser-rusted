@@ -1,13 +1,14 @@
 use chrono::Duration;
 use chrono::Utc;
 use jsonwebtoken::errors::ErrorKind;
-use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use serde_with::DisplayFromStr;
 use serde_with::serde_as;
+use serde_with::DisplayFromStr;
 use std::env;
 use std::mem::discriminant;
 use std::sync::LazyLock;
+use database::entity::UserType;
 
 /// Key for token verification.
 static DECODING_KEY: LazyLock<DecodingKey> = LazyLock::new(|| {
@@ -42,27 +43,31 @@ impl PartialEq for Error {
     }
 }
 
+
 /// The data the token holds.
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize)]
-struct Claims {
+pub struct Claims {
     /// User account UUID.
-    id: String,
+    pub id: String,
+
+    /// User type.
+    pub user_type: Option<UserType>,
 
     /// Token creation date.
     #[serde_as(as = "DisplayFromStr")]
-    iat: u64,
+    pub iat: u64,
 
     /// Token expiry date.
     #[serde_as(as = "DisplayFromStr")]
-    exp: u64,
+    pub exp: u64,
 }
 
 /// Token signing algorithm.
 pub(crate) const DEFAULT_ALGORITHM: Algorithm = Algorithm::HS256;
 
 /// Checking the token and extracting the UUID of the user account from it.
-pub fn verify_and_decode(token: &str) -> Result<String, Error> {
+pub fn verify_and_decode(token: &str) -> Result<Claims, Error> {
     let mut validation = Validation::new(DEFAULT_ALGORITHM);
 
     validation.required_spec_claims.remove("exp");
@@ -75,7 +80,7 @@ pub fn verify_and_decode(token: &str) -> Result<String, Error> {
             if token_data.claims.exp < Utc::now().timestamp().unsigned_abs() {
                 Err(Error::Expired)
             } else {
-                Ok(token_data.claims.id)
+                Ok(token_data.claims)
             }
         }
         Err(err) => Err(match err.into_kind() {
@@ -87,7 +92,7 @@ pub fn verify_and_decode(token: &str) -> Result<String, Error> {
 }
 
 /// Creating a user token.
-pub fn encode(id: &str) -> String {
+pub fn encode(user_type: UserType, id: &str) -> String {
     let header = Header {
         typ: Some(String::from("JWT")),
         ..Default::default()
@@ -98,6 +103,7 @@ pub fn encode(id: &str) -> String {
 
     let claims = Claims {
         id: id.to_string(),
+        user_type: Some(user_type),
         iat: iat.timestamp().unsigned_abs(),
         exp: exp.timestamp().unsigned_abs(),
     };
@@ -114,7 +120,7 @@ mod tests {
     fn test_encode() {
         test_env();
 
-        assert!(!encode("test").is_empty());
+        assert!(!encode(UserType::Default, "test").is_empty());
     }
 
     #[test]
@@ -125,10 +131,7 @@ mod tests {
         let result = verify_and_decode(&token);
 
         assert!(result.is_err());
-        assert_eq!(
-            result.err().unwrap(),
-            Error::InvalidToken
-        );
+        assert_eq!(result.err().unwrap(), Error::InvalidToken);
     }
 
     //noinspection SpellCheckingInspection

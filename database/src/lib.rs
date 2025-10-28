@@ -4,6 +4,8 @@ pub use migration;
 pub use sea_orm;
 
 pub mod entity {
+    use serde::{Deserialize, Serialize};
+
     pub use entity::*;
 
     pub use entity::user::{
@@ -19,4 +21,11 @@ pub mod entity {
         Entity as ServiceUserEntity,      //
         Model as ServiceUser,             //
     };
+
+    #[derive(Debug, Serialize, Deserialize, PartialEq)]
+    #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+    pub enum UserType {
+        Default,
+        Service,
+    }
 }

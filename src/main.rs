@@ -1,8 +1,9 @@
-use crate::middlewares::authorization::JWTAuthorization;
+use crate::middlewares::authorization::{JWTAuthorizationBuilder, ServiceConfig};
 use crate::middlewares::content_type::ContentTypeBootstrap;
 use crate::state::{new_app_state, AppState};
 use actix_web::dev::{ServiceFactory, ServiceRequest};
 use actix_web::{App, Error, HttpServer};
+use database::entity::sea_orm_active_enums::UserRole;
 use dotenvy::dotenv;
 use log::info;
 use std::io;
@@ -26,6 +27,22 @@ pub fn get_api_scope<
 >(
     scope: I,
 ) -> Scope<T> {
+    let admin_scope = {
+        let service_user_scope =
+            utoipa_actix_web::scope("/service-users").service(routes::admin::service_users::create);
+
+        utoipa_actix_web::scope("/admin")
+            .wrap(
+                JWTAuthorizationBuilder::new()
+                    .with_default(Some(ServiceConfig {
+                        allow_service: false,
+                        user_roles: Some(&[UserRole::Admin]),
+                    }))
+                    .build(),
+            )
+            .service(service_user_scope)
+    };
+
     let auth_scope = utoipa_actix_web::scope("/auth")
         .service(routes::auth::sign_in)
         .service(routes::auth::sign_in_vk)
@@ -33,26 +50,49 @@ pub fn get_api_scope<
         .service(routes::auth::sign_up_vk);
 
     let users_scope = utoipa_actix_web::scope("/users")
-        .wrap(JWTAuthorization::default())
+        .wrap(JWTAuthorizationBuilder::new().build())
         .service(routes::users::change_group)
         .service(routes::users::change_username)
         .service(routes::users::me);
 
     let schedule_scope = utoipa_actix_web::scope("/schedule")
-        .wrap(JWTAuthorization {
-            ignore: &["/group-names", "/teacher-names"],
-        })
-        .service(routes::schedule::schedule)
+        .wrap(
+            JWTAuthorizationBuilder::new()
+                .with_default(Some(ServiceConfig {
+                    allow_service: true,
+                    user_roles: None,
+                }))
+                .add_paths(["/group-names", "/teacher-names"], None)
+                .add_paths(
+                    ["/"],
+                    Some(ServiceConfig {
+                        allow_service: true,
+                        user_roles: Some(&[UserRole::Admin]),
+                    }),
+                )
+                .add_paths(
+                    ["/group"],
+                    Some(ServiceConfig {
+                        allow_service: false,
+                        user_roles: None,
+                    }),
+                )
+                .build(),
+        )
         .service(routes::schedule::cache_status)
+        .service(routes::schedule::schedule)
         .service(routes::schedule::group)
+        .service(routes::schedule::group_by_name)
         .service(routes::schedule::group_names)
         .service(routes::schedule::teacher)
         .service(routes::schedule::teacher_names);
 
     let flow_scope = utoipa_actix_web::scope("/flow")
-        .wrap(JWTAuthorization {
-            ignore: &["/telegram-auth"],
-        })
+        .wrap(
+            JWTAuthorizationBuilder::new()
+                .add_paths(["/telegram-auth"], None)
+                .build(),
+        )
         .service(routes::flow::telegram_auth)
         .service(routes::flow::telegram_complete);
 
@@ -60,6 +100,7 @@ pub fn get_api_scope<
         .service(routes::vk_id::oauth);
 
     utoipa_actix_web::scope(scope)
+        .service(admin_scope)
         .service(auth_scope)
         .service(users_scope)
         .service(schedule_scope)

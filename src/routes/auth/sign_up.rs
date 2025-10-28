@@ -5,7 +5,7 @@ use crate::routes::schema::ResponseError;
 use crate::{utility, AppState};
 use actix_web::{post, web};
 use database::entity::sea_orm_active_enums::UserRole;
-use database::entity::ActiveUser;
+use database::entity::{ActiveUser, UserType};
 use database::query::Query;
 use database::sea_orm::ActiveModelTrait;
 use web::Json;
@@ -51,7 +51,7 @@ async fn sign_up_combined(
 
     let active_user: ActiveUser = data.into();
     let user = active_user.insert(db).await.unwrap();
-    let access_token = utility::jwt::encode(&user.id);
+    let access_token = utility::jwt::encode(UserType::Default, &user.id);
 
     Ok(UserResponse::from_user_with_token(user, access_token))
 }

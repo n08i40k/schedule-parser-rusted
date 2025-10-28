@@ -1,12 +1,12 @@
 use crate::extractors::base::FromRequestAsync;
 use crate::state::AppState;
-use crate::utility::jwt;
+use crate::utility::req_auth;
+use crate::utility::req_auth::get_claims_from_req;
 use actix_macros::MiddlewareError;
 use actix_web::body::BoxBody;
 use actix_web::dev::Payload;
-use actix_web::http::header;
 use actix_web::{web, HttpRequest};
-use database::entity::User;
+use database::entity::{User, UserType};
 use database::query::Query;
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
@@ -28,80 +28,53 @@ pub enum Error {
     #[display("Invalid or expired access token")]
     InvalidAccessToken,
 
+    /// Default user is required.
+    #[display("Non-default user type is owning this access token")]
+    #[status_code = "actix_web::http::StatusCode::FORBIDDEN"]
+    NonDefaultUserType,
+
     /// The user bound to the token is not found in the database.
     #[display("No user associated with access token")]
     NoUser,
+
+    /// User doesn't have required role.
+    #[display("You don't have sufficient rights")]
+    #[status_code = "actix_web::http::StatusCode::FORBIDDEN"]
+    InsufficientRights,
 }
 
-impl Error {
-    pub fn into_err(self) -> actix_web::Error {
-        actix_web::Error::from(self)
+impl From<req_auth::Error> for Error {
+    fn from(value: req_auth::Error) -> Self {
+        match value {
+            req_auth::Error::NoHeaderOrCookieFound => Error::NoHeaderOrCookieFound,
+            req_auth::Error::UnknownAuthorizationType => Error::UnknownAuthorizationType,
+            req_auth::Error::InvalidAccessToken => Error::InvalidAccessToken,
+        }
     }
-}
-
-fn get_access_token_from_header(req: &HttpRequest) -> Result<String, Error> {
-    let header_value = req
-        .headers()
-        .get(header::AUTHORIZATION)
-        .ok_or(Error::NoHeaderOrCookieFound)?
-        .to_str()
-        .map_err(|_| Error::NoHeaderOrCookieFound)?
-        .to_string();
-
-    let parts = header_value
-        .split_once(' ')
-        .ok_or(Error::UnknownAuthorizationType)?;
-
-    if parts.0 != "Bearer" {
-        Err(Error::UnknownAuthorizationType)
-    } else {
-        Ok(parts.1.to_string())
-    }
-}
-
-fn get_access_token_from_cookies(req: &HttpRequest) -> Result<String, Error> {
-    let cookie = req
-        .cookie("access_token")
-        .ok_or(Error::NoHeaderOrCookieFound)?;
-
-    Ok(cookie.value().to_string())
 }
 
 /// User extractor from request with Bearer access token.
 impl FromRequestAsync for User {
-    type Error = actix_web::Error;
+    type Error = Error;
 
     async fn from_request_async(
         req: &HttpRequest,
         _payload: &mut Payload,
     ) -> Result<Self, Self::Error> {
-        let access_token = match get_access_token_from_header(req) {
-            Err(Error::NoHeaderOrCookieFound) => {
-                get_access_token_from_cookies(req).map_err(|error| error.into_err())?
-            }
-            Err(error) => {
-                return Err(error.into_err());
-            }
-            Ok(access_token) => access_token,
-        };
+        let claims = get_claims_from_req(req).map_err(Error::from)?;
 
-        let user_id = jwt::verify_and_decode(&access_token)
-            .map_err(|_| Error::InvalidAccessToken.into_err())?;
+        if claims.user_type.unwrap_or(UserType::Default) != UserType::Default {
+            return Err(Error::NonDefaultUserType);
+        }
 
         let db = req
             .app_data::<web::Data<AppState>>()
             .unwrap()
             .get_database();
 
-        Query::find_user_by_id(db, &user_id)
-            .await
-            .map_err(|_| Error::NoUser.into())
-            .and_then(|user| {
-                if let Some(user) = user {
-                    Ok(user)
-                } else {
-                    Err(actix_web::Error::from(Error::NoUser))
-                }
-            })
+        match Query::find_user_by_id(db, &claims.id).await {
+            Ok(Some(user)) => Ok(user),
+            _ => Err(Error::NoUser),
+        }
     }
 }

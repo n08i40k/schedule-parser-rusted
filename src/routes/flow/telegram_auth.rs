@@ -5,7 +5,7 @@ use crate::{utility, AppState};
 use actix_web::{post, web};
 use chrono::{DateTime, Duration, Utc};
 use database::entity::sea_orm_active_enums::UserRole;
-use database::entity::ActiveUser;
+use database::entity::{ActiveUser, UserType};
 use database::query::Query;
 use database::sea_orm::{ActiveModelTrait, Set};
 use objectid::ObjectId;
@@ -73,7 +73,7 @@ pub async fn telegram_auth(
         }
     };
 
-    let access_token = utility::jwt::encode(&user.id);
+    let access_token = utility::jwt::encode(UserType::Default, &user.id);
     Ok(Response::new(&access_token, user.group.is_some())).into()
 }
 
