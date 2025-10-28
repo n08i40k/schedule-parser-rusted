@@ -38,7 +38,7 @@ futures-util = "0"
 
 # authorization
 bcrypt = "0"
-jsonwebtoken = { version = "9", features = ["use_pem"] }
+jsonwebtoken = { version = "10", features = ["use_pem"] }
 
 # creating users
 objectid = "0"
