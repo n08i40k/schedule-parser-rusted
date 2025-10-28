@@ -50,7 +50,22 @@ pub fn get_api_scope<
         .service(routes::auth::sign_up_vk);
 
     let users_scope = utoipa_actix_web::scope("/users")
-        .wrap(JWTAuthorizationBuilder::new().build())
+        .wrap(
+            JWTAuthorizationBuilder::new()
+                .add_paths(
+                    ["/by/id/{id}", "/by/telegram-id/{id}"],
+                    Some(ServiceConfig {
+                        allow_service: true,
+                        user_roles: Some(&[UserRole::Admin]),
+                    }),
+                )
+                .build(),
+        )
+        .service(
+            utoipa_actix_web::scope("/by")
+                .service(routes::users::by::by_id)
+                .service(routes::users::by::by_telegram_id),
+        )
         .service(routes::users::change_group)
         .service(routes::users::change_username)
         .service(routes::users::me);

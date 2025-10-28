@@ -163,6 +163,7 @@ pub mod user {
         #[schema(examples(
             "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6IjY3ZGNjOWE5NTA3YjAwMDA3NzI3NDRhMiIsImlhdCI6IjE3NDMxMDgwOTkiLCJleHAiOiIxODY5MjUyMDk5In0.rMgXRb3JbT9AvLK4eiY9HMB5LxgUudkpQyoWKOypZFY"
         ))]
+        #[serde(skip_serializing_if = "Option::is_none")]
         pub access_token: Option<String>,
     }
 

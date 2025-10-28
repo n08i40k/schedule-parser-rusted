@@ -1,3 +1,4 @@
+pub mod by;
 mod change_group;
 mod change_username;
 mod me;
