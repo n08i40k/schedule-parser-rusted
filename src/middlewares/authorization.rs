@@ -5,13 +5,13 @@ use actix_web::body::{BoxBody, EitherBody};
 use actix_web::dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::{web, Error, HttpRequest, ResponseError};
 use database::entity::sea_orm_active_enums::UserRole;
+use database::entity::UserType;
 use database::query::Query;
 use futures_util::future::LocalBoxFuture;
 use std::future::{ready, Ready};
 use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
-use database::entity::UserType;
 
 #[derive(Default, Clone)]
 pub struct ServiceConfig {
@@ -42,7 +42,11 @@ impl JWTAuthorizationBuilder {
         self
     }
 
-    pub fn add_paths(mut self, paths: impl AsRef<[&'static str]>, config: Option<ServiceConfig>) -> Self {
+    pub fn add_paths(
+        mut self,
+        paths: impl AsRef<[&'static str]>,
+        config: Option<ServiceConfig>,
+    ) -> Self {
         self.path_configs.push((Arc::from(paths.as_ref()), config));
         self
     }
@@ -176,11 +180,20 @@ where
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let service = Rc::clone(&self.service);
 
-        let Some(config) = Self::find_config(
-            req.match_info().unprocessed(),
-            &self.path_configs,
-            &self.default_config,
-        ) else {
+        let match_info = req.match_info();
+        let path = if let Some(pattern) = req.match_pattern() {
+            let scope_start_idx = match_info
+                .as_str()
+                .find(match_info.unprocessed())
+                .unwrap_or(0);
+
+            pattern.as_str().split_at(scope_start_idx).1.to_owned()
+        } else {
+            match_info.unprocessed().to_owned()
+        };
+
+        let Some(config) = Self::find_config(&path, &self.path_configs, &self.default_config)
+        else {
             let fut = self.service.call(req);
             return Box::pin(async move { Ok(fut.await?.map_into_left_body()) });
         };
