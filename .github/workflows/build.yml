@@ -140,3 +140,6 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             "BINARY_NAME=${{ env.BINARY_NAME }}"
+
+      - name: Deploy
+        run: curl ${{ secrets.DEPLOY_URL }}
