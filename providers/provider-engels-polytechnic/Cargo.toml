@@ -9,23 +9,23 @@ test = []
 [dependencies]
 base = { path = "../base" }
 
-tokio = { version = "1.47.1", features = ["sync", "macros", "time"] }
-tokio-util = "0.7.16"
+tokio = { version = "1", features = ["sync", "macros", "time"] }
+tokio-util = "0"
 
-chrono = { version = "0.4.41", features = ["serde"] }
+chrono = { version = "0", features = ["serde"] }
 
-derive_more = { version = "2.0.1", features = ["error", "display", "from"] }
+derive_more = { version = "2", features = ["error", "display", "from"] }
 
-utoipa = { version = "5.4.0", features = ["macros", "chrono"] }
+utoipa = { version = "5", features = ["macros", "chrono"] }
 
-calamine = "0.31"
-async-trait = "0.1.89"
+calamine = "0"
+async-trait = "0"
 
-reqwest = "0.12.23"
-ua_generator = "0.5.22"
-regex = "1.11.2"
-strsim = "0.11.1"
-log = "0.4.27"
-sentry = "0.43.0"
-fancy-regex = "0.16.2"
+reqwest = "0"
+ua_generator = "0"
+regex = "1"
+strsim = "0"
+log = "0"
+sentry = "0"
+fancy-regex = "0"
 
