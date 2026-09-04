@@ -33,5 +33,3 @@ jobs:
           TELEGRAM_BOT_ID: 0
           TELEGRAM_MINI_APP_HOST: example.com
           TELEGRAM_TEST_DC: false
-          YANDEX_CLOUD_API_KEY: ""
-          YANDEX_CLOUD_FUNC_ID: ""

@@ -38,13 +38,8 @@ impl AppState {
 
                 #[cfg(not(test))]
                 {
-                    if let Some(url) = &env.schedule.url {
-                        providers::EngelsPolytechnicUpdateSource::Url(url.clone())
-                    } else {
-                        providers::EngelsPolytechnicUpdateSource::GrabFromSite {
-                            yandex_api_key: env.yandex_cloud.api_key.clone(),
-                            yandex_func_id: env.yandex_cloud.func_id.clone(),
-                        }
+                    providers::EngelsPolytechnicUpdateSource::YandexDisk {
+                        public_url: env.schedule.yandex_disk_url.clone(),
                     }
                 }
             })

@@ -21,7 +21,9 @@ utoipa = { version = "5", features = ["macros", "chrono"] }
 calamine = "0"
 async-trait = "0"
 
-reqwest = "0"
+reqwest = { version = "0", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+percent-encoding = "2"
 ua_generator = "0"
 regex = "1"
 strsim = "0"

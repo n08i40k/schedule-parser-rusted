@@ -3,25 +3,16 @@ use derive_more::{Display, Error, From};
 
 #[derive(Debug, Display, Error, From)]
 pub enum Error {
-    /// Occurs when the request to the Yandex Cloud API fails.
-    ///
-    /// This may be due to network issues, invalid API key, incorrect function ID, or other
-    /// problems with the Yandex Cloud Function invocation.
-    #[display("An error occurred during the request to the Yandex Cloud API: {_0}")]
-    Reqwest(reqwest::Error),
+    /// The remote file has not changed since the last update.
+    #[display("The schedule file has not changed.")]
+    NotModified,
 
-    #[display("Unable to get URI in 3 retries")]
-    EmptyUri,
-
-    /// The ETag is the same (no update needed).
-    #[display("The ETag is the same.")]
-    SameETag,
-
-    /// The URL query for the XLS file failed to execute, either due to network issues or invalid API parameters.
+    /// The lookup of the current schedule file failed, either due to network issues or an
+    /// unexpected response from the storage.
     #[display("Failed to fetch URL: {_0}")]
     ScheduleFetchFailed(FetchError),
 
-    /// Downloading the XLS file content failed after successfully obtaining the URL.
+    /// Downloading the XLS file content failed after successfully locating the file.
     #[display("Download failed: {_0}")]
     ScheduleDownloadFailed(FetchError),
 

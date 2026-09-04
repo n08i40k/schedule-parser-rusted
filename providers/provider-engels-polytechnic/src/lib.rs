@@ -63,8 +63,6 @@ impl ScheduleProvider for Wrapper {
                             this.snapshot = Arc::new(snapshot);
                         },
 
-                        Err(updater::Error::EmptyUri) => {},
-
                         Err(err) => {
                             sentry::capture_error(&err);
                         }
