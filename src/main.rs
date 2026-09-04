@@ -1,14 +1,14 @@
 use crate::middlewares::authorization::{JWTAuthorizationBuilder, ServiceConfig};
 use crate::middlewares::content_type::ContentTypeBootstrap;
-use crate::state::{new_app_state, AppState};
+use crate::state::{AppState, new_app_state};
 use actix_web::dev::{ServiceFactory, ServiceRequest};
 use actix_web::{App, Error, HttpServer};
 use database::entity::sea_orm_active_enums::UserRole;
 use dotenvy::dotenv;
 use log::info;
 use std::io;
-use utoipa_actix_web::scope::Scope;
 use utoipa_actix_web::AppExt;
+use utoipa_actix_web::scope::Scope;
 use utoipa_rapidoc::RapiDoc;
 
 mod state;
@@ -158,11 +158,9 @@ async fn async_main() -> io::Result<()> {
 fn main() -> io::Result<()> {
     let _guard = sentry::init((
         "https://9c33db76e89984b3f009b28a9f4b5954@sentry.n08i40k.ru/8",
-        sentry::ClientOptions {
-            release: sentry::release_name!(),
-            send_default_pii: true,
-            ..Default::default()
-        },
+        sentry::ClientOptions::new()
+            .maybe_release(sentry::release_name!())
+            .send_default_pii(true),
     ));
 
     let _ = dotenv();

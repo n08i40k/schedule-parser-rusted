@@ -1,12 +1,12 @@
 pub use self::error::{Error, Result};
 use crate::or_continue;
-use crate::parser::worksheet::{CellPos, CellRange, WorkSheet};
 use crate::parser::LessonParseResult::{Lessons, Street};
+use crate::parser::worksheet::{CellPos, CellRange, WorkSheet};
 use base::LessonType::Break;
 use base::{
     Day, Lesson, LessonBoundaries, LessonSubGroup, LessonType, ParsedSchedule, ScheduleEntry,
 };
-use calamine::{open_workbook_from_rs, Reader, Xls};
+use calamine::{Reader, Xls, open_workbook_from_rs};
 use chrono::{DateTime, Duration, NaiveDate, NaiveTime, Utc};
 use regex::Regex;
 use std::collections::HashMap;
@@ -243,12 +243,9 @@ fn parse_lesson(
             .first()
             .ok_or(Error::LessonTimeNotFound(CellPos::new(row, group_column)))?;
 
-        let range: Option<[u8; 2]> = if lesson_boundaries.default_index.is_some() {
-            let default = lesson_boundaries.default_index.unwrap() as u8;
-            Some([default, end_time.default_index.unwrap() as u8])
-        } else {
-            None
-        };
+        let range: Option<[u8; 2]> = lesson_boundaries
+            .default_index
+            .map(|default_index| [default_index as u8, end_time.default_index.unwrap() as u8]);
 
         let time = LessonBoundaries {
             start: lesson_boundaries.time_range.start,
@@ -743,8 +740,8 @@ pub fn parse_xls(buffer: &Vec<u8>) -> Result<ParsedSchedule> {
             .clone();
 
         let worksheet_merges = workbook
-            .worksheet_merge_cells(&worksheet_name)
-            .ok_or(Error::NoWorkSheets)?;
+            .merge_cells_by_sheet_name(&worksheet_name)
+            .map_err(|_| Error::NoWorkSheets)?;
 
         WorkSheet {
             data: worksheet,

@@ -38,13 +38,13 @@ futures-util = "0"
 
 # authorization
 bcrypt = "0"
-jsonwebtoken = { version = "9", features = ["use_pem"] }
+jsonwebtoken = { version = "11", features = ["use_pem"] }
 
 # creating users
 objectid = "0"
 
 # schedule downloader
-reqwest = { version = "0", features = ["json"] }
+reqwest = { version = "0", features = ["json", "form"] }
 mime = "0"
 
 # error handling
