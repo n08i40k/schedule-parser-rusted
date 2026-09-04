@@ -1,5 +1,5 @@
 use sea_orm_migration::prelude::extension::postgres::Type;
-use sea_orm_migration::sea_orm::{EnumIter, Iterable};
+use sea_orm_migration::sea_orm::{DatabaseBackend, EnumIter, Iterable};
 use sea_orm_migration::{prelude::*, schema::*};
 
 #[derive(DeriveMigrationName)]
@@ -8,14 +8,16 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_type(
-                Type::create()
-                    .as_enum(UserRole)
-                    .values(UserRoleVariants::iter())
-                    .to_owned(),
-            )
-            .await?;
+        if manager.get_database_backend() == DatabaseBackend::Postgres {
+            manager
+                .create_type(
+                    Type::create()
+                        .as_enum(UserRole)
+                        .values(UserRoleVariants::iter())
+                        .to_owned(),
+                )
+                .await?;
+        }
 
         manager
             .create_table(
@@ -40,9 +42,13 @@ impl MigrationTrait for Migration {
             .drop_table(Table::drop().table(User::Table).to_owned())
             .await?;
 
-        manager
-            .drop_type(Type::drop().name(UserRole).to_owned())
-            .await
+        if manager.get_database_backend() == DatabaseBackend::Postgres {
+            manager
+                .drop_type(Type::drop().name(UserRole).to_owned())
+                .await?;
+        }
+
+        Ok(())
     }
 }
 

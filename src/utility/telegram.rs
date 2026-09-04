@@ -1,9 +1,12 @@
+use aws_lc_rs::signature::{ED25519, UnparsedPublicKey};
 use base64::Engine;
 use derive_more::{Display, Error};
-use ed25519_dalek::Verifier;
 use hex_literal::hex;
 use serde::Deserialize;
 use std::collections::HashMap;
+
+/// Длина подписи Ed25519 в байтах.
+const ED25519_SIGNATURE_LENGTH: usize = 64;
 
 pub struct WebAppInitDataMap {
     pub data_map: HashMap<String, String>,
@@ -54,10 +57,10 @@ impl WebAppInitDataMap {
             hex!("40055058a4ee38156a06562e52eece92a771bcd8346a8c4615cb7376eddf72ec"),
         ];
 
-        let verifying_key = ed25519_dalek::VerifyingKey::from_bytes(
-            &TELEGRAM_PUBLIC_KEY[if test_dc { 1 } else { 0 }],
-        )
-        .unwrap();
+        let verifying_key = UnparsedPublicKey::new(
+            &ED25519,
+            TELEGRAM_PUBLIC_KEY[if test_dc { 1 } else { 0 }],
+        );
 
         let signature = {
             let raw = self
@@ -69,8 +72,11 @@ impl WebAppInitDataMap {
                 .decode(raw)
                 .map_err(|_| VerifyError::BadSignature)?;
 
-            ed25519_dalek::Signature::from_slice(bytes.as_slice())
-                .map_err(|_| VerifyError::BadSignature)?
+            if bytes.len() != ED25519_SIGNATURE_LENGTH {
+                return Err(VerifyError::BadSignature);
+            }
+
+            bytes
         };
 
         let data_check_string = format!("{}:WebAppData\n{}", bot_id, {
@@ -85,7 +91,7 @@ impl WebAppInitDataMap {
         });
 
         verifying_key
-            .verify(data_check_string.as_bytes(), &signature)
+            .verify(data_check_string.as_bytes(), signature.as_slice())
             .map_err(|_| VerifyError::IntegrityCheckFailed)
     }
 }

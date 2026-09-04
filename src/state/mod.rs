@@ -51,15 +51,8 @@ impl AppState {
             database: if let Some(database) = database {
                 database
             } else {
-                let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-
-                let mut opt = ConnectOptions::new(database_url.clone());
-
-                opt.max_connections(4)
-                    .min_connections(2)
-                    .connect_timeout(Duration::from_secs(10))
-                    .idle_timeout(Duration::from_secs(8))
-                    .sqlx_logging(true);
+                let opt = database_connect_options();
+                let database_url = opt.get_url().to_string();
 
                 let database = Database::connect(opt)
                     .await
@@ -102,6 +95,43 @@ impl AppState {
     pub fn get_env(&self) -> &AppEnv {
         &self.env
     }
+}
+
+/// Параметры подключения к базе данных.
+#[cfg(not(test))]
+fn database_connect_options() -> ConnectOptions {
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+
+    let mut opt = ConnectOptions::new(database_url);
+
+    opt.max_connections(4)
+        .min_connections(2)
+        .connect_timeout(Duration::from_secs(10))
+        .idle_timeout(Duration::from_secs(8))
+        .sqlx_logging(true);
+
+    opt
+}
+
+/// SQLite во временном файле: база в памяти умрёт вместе с соединением.
+#[cfg(test)]
+fn database_connect_options() -> ConnectOptions {
+    let path = std::env::temp_dir().join(format!(
+        "{}-test-{}.sqlite",
+        env!("CARGO_PKG_NAME"),
+        std::process::id()
+    ));
+
+    let _ = std::fs::remove_file(&path);
+
+    let mut opt = ConnectOptions::new(format!("sqlite://{}?mode=rwc", path.display()));
+
+    opt.max_connections(1)
+        .min_connections(1)
+        .connect_timeout(Duration::from_secs(10))
+        .sqlx_logging(true);
+
+    opt
 }
 
 /// Create a new object web::Data<AppState>.

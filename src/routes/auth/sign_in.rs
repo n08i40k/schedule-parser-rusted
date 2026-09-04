@@ -146,8 +146,8 @@ mod tests {
     use actix_web::http::StatusCode;
     use actix_web::test;
     use database::entity::sea_orm_active_enums::UserRole;
-    use database::entity::ActiveUser;
-    use database::sea_orm::{ActiveModelTrait, Set};
+    use database::entity::{ActiveUser, UserEntity};
+    use database::sea_orm::{ActiveModelTrait, EntityTrait, Set};
     use sha1::{Digest, Sha1};
     use std::fmt::Write;
 
@@ -193,8 +193,13 @@ mod tests {
             android_version: Set(None),
         };
 
+        UserEntity::delete_by_id(&id)
+            .exec(app_state.get_database())
+            .await
+            .expect("Failed to delete user");
+
         active_user
-            .save(app_state.get_database())
+            .insert(app_state.get_database())
             .await
             .expect("Failed to save user");
     }

@@ -6,7 +6,7 @@ ARG BINARY_NAME
 WORKDIR /app/
 
 RUN apt update && \
-    apt install -y libpq5 ca-certificates openssl
+    apt install -y ca-certificates
 
 COPY ./${BINARY_NAME} /bin/main
 RUN chmod +x /bin/main

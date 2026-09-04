@@ -13,8 +13,6 @@ env:
 
   BINARY_NAME: schedule-parser-rusted
 
-  TEST_DB: ${{ secrets.TEST_DATABASE_URL }}
-
   SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
   SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
   SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
@@ -43,7 +41,6 @@ jobs:
         run: |
           cargo test
         env:
-          DATABASE_URL: ${{ env.TEST_DB }}
           SCHEDULE_DISABLE_AUTO_UPDATE: 1
           JWT_SECRET: "test-secret-at-least-256-bits-used"
           VK_ID_CLIENT_ID: 0
