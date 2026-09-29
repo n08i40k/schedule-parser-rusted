@@ -3,15 +3,6 @@ use chrono::{DateTime, Utc};
 use percent_encoding::{AsciiSet, CONTROLS, NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::Deserialize;
 
-/// Prefix of the schedule file names in the shared folder.
-const NAME_PREFIX: &str = "poltavskaja_";
-
-/// Marker of the corrections file, which holds a separate schedule.
-const NAME_EXCLUDED_MARKER: &str = "korr";
-
-/// Extension of the schedule files.
-const NAME_SUFFIX: &str = ".xls";
-
 /// Maximum amount of entries requested from the folder listing.
 const LISTING_LIMIT: u32 = 200;
 
@@ -54,15 +45,7 @@ struct Item {
 impl Item {
     /// Whether the entry is the schedule the provider is interested in.
     fn is_schedule(&self) -> bool {
-        if self.resource_type != "file" || self.file.is_none() {
-            return false;
-        }
-
-        let name = self.name.to_lowercase();
-
-        name.starts_with(NAME_PREFIX)
-            && name.ends_with(NAME_SUFFIX)
-            && !name.contains(NAME_EXCLUDED_MARKER)
+        self.resource_type == "file" && self.file.is_some() && super::is_schedule_name(&self.name)
     }
 
     /// Marker changing whenever the file content changes.

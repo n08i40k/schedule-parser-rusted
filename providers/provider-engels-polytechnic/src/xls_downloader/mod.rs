@@ -3,7 +3,26 @@ use derive_more::{Display, Error};
 use std::mem::discriminant;
 use std::sync::Arc;
 
+mod dropbox;
 mod yandex_disk;
+
+/// Prefix of the schedule file names in the shared folder.
+const NAME_PREFIX: &str = "poltavskaja_";
+
+/// Marker of the corrections file, which holds a separate schedule.
+const NAME_EXCLUDED_MARKER: &str = "korr";
+
+/// Extension of the schedule files.
+const NAME_SUFFIX: &str = ".xls";
+
+/// Whether the file name belongs to the schedule the provider is interested in.
+fn is_schedule_name(name: &str) -> bool {
+    let name = name.to_lowercase();
+
+    name.starts_with(NAME_PREFIX)
+        && name.ends_with(NAME_SUFFIX)
+        && !name.contains(NAME_EXCLUDED_MARKER)
+}
 
 /// XLS data retrieval errors.
 #[derive(Clone, Debug, Display, Error)]
@@ -15,6 +34,10 @@ pub enum FetchError {
     /// Server returned a status code different from 200.
     #[display("Server returned a status code {status_code}.")]
     BadStatusCode { status_code: u16 },
+
+    /// The shared folder link has an unsupported format.
+    #[display("The shared folder link has an unsupported format.")]
+    InvalidUrl,
 
     /// The folder contains no file matching the schedule name pattern.
     #[display("No schedule file was found in the shared folder.")]
@@ -55,20 +78,23 @@ pub struct RemoteFile {
     pub modified_at: DateTime<Utc>,
 }
 
-/// Public Yandex Disk folder the schedule is downloaded from.
+/// Public shared folder the schedule is downloaded from.
 #[derive(Clone, Debug)]
-pub struct Source {
-    pub public_url: String,
+pub enum Source {
+    /// Public Yandex Disk folder.
+    YandexDisk { public_url: String },
+
+    /// Public Dropbox folder.
+    Dropbox { public_url: String },
 }
 
 impl Source {
-    pub fn new(public_url: String) -> Self {
-        Self { public_url }
-    }
-
     /// Looks up the current schedule file without downloading its content.
     pub async fn probe(&self) -> FetchResult<RemoteFile> {
-        yandex_disk::probe(&self.public_url).await
+        match self {
+            Self::YandexDisk { public_url } => yandex_disk::probe(public_url).await,
+            Self::Dropbox { public_url } => dropbox::probe(public_url).await,
+        }
     }
 
     /// Downloads the content of a previously probed file.

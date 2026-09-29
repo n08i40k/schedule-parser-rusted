@@ -38,8 +38,17 @@ impl AppState {
 
                 #[cfg(not(test))]
                 {
-                    providers::EngelsPolytechnicUpdateSource::YandexDisk {
-                        public_url: env.schedule.yandex_disk_url.clone(),
+                    match &env.schedule.source_url {
+                        env::schedule::ScheduleSourceUrl::YandexDisk(public_url) => {
+                            providers::EngelsPolytechnicUpdateSource::YandexDisk {
+                                public_url: public_url.clone(),
+                            }
+                        }
+                        env::schedule::ScheduleSourceUrl::Dropbox(public_url) => {
+                            providers::EngelsPolytechnicUpdateSource::Dropbox {
+                                public_url: public_url.clone(),
+                            }
+                        }
                     }
                 }
             })

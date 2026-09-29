@@ -12,6 +12,11 @@ pub enum UpdateSource {
     YandexDisk {
         public_url: String,
     },
+
+    /// Public Dropbox folder the college uploads the schedule to.
+    Dropbox {
+        public_url: String,
+    },
 }
 
 pub struct Updater {
@@ -26,7 +31,12 @@ impl Updater {
     fn source(&self) -> Option<Source> {
         match &self.update_source {
             UpdateSource::Prepared(_) => None,
-            UpdateSource::YandexDisk { public_url } => Some(Source::new(public_url.clone())),
+            UpdateSource::YandexDisk { public_url } => Some(Source::YandexDisk {
+                public_url: public_url.clone(),
+            }),
+            UpdateSource::Dropbox { public_url } => Some(Source::Dropbox {
+                public_url: public_url.clone(),
+            }),
         }
     }
 
