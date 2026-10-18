@@ -100,20 +100,16 @@ fn parse_markup(worksheet: &WorkSheet) -> Result<WorkSheetMarkup> {
         }
 
         let (day_name, day_date) = {
-            let space_index = match day_full_name.find(' ') {
-                Some(index) => {
-                    if index < 10 {
-                        break;
-                    } else {
-                        index
-                    }
-                }
-                None => break,
+            // Some spreadsheets omit the space between the weekday and date.
+            static DAY_RE: LazyLock<Regex> = LazyLock::new(|| {
+                Regex::new(r"^([А-Яа-яЁё]+)\s*(\d{1,2}\.\d{1,2}\.\d{4})$").unwrap()
+            });
+            let Some(captures) = DAY_RE.captures(&day_full_name) else {
+                break;
             };
 
-            let name = day_full_name[..space_index].to_string();
-
-            let date_slice = &day_full_name[space_index + 1..];
+            let name = captures[1].to_string();
+            let date_slice = &captures[2];
             let date = NaiveDate::parse_from_str(date_slice, "%d.%m.%Y")
                 .map(|date| date.and_time(NaiveTime::default()).and_utc())
                 .ok();
