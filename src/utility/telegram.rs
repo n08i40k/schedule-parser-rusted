@@ -1,5 +1,5 @@
 use aws_lc_rs::signature::{ED25519, UnparsedPublicKey};
-use base64::Engine;
+use base64::{Engine, engine::DecodePaddingMode, engine::general_purpose};
 use derive_more::{Display, Error};
 use hex_literal::hex;
 use serde::Deserialize;
@@ -31,23 +31,12 @@ pub enum VerifyError {
 
 impl WebAppInitDataMap {
     pub fn from_str(data: String) -> Self {
-        let mut this = Self {
-            data_map: HashMap::new(),
-        };
-
-        data.split('&')
-            .map(|kv| kv.split_once('=').unwrap_or((kv, "")))
-            .for_each(|(key, value)| {
-                this.data_map.insert(key.to_string(), value.to_string());
-            });
-
-        if let Some(user) = this.data_map.get_mut("user") {
-            *user = percent_encoding::percent_decode_str(&*user)
-                .decode_utf8_lossy()
-                .to_string();
+        Self {
+            // Decode every field exactly once before checking Telegram's signature.
+            data_map: form_urlencoded::parse(data.as_bytes())
+                .into_owned()
+                .collect(),
         }
-
-        this
     }
 
     pub fn verify(&self, bot_id: i64, test_dc: bool) -> Result<(), VerifyError> {
@@ -57,20 +46,30 @@ impl WebAppInitDataMap {
             hex!("40055058a4ee38156a06562e52eece92a771bcd8346a8c4615cb7376eddf72ec"),
         ];
 
-        let verifying_key = UnparsedPublicKey::new(
-            &ED25519,
-            TELEGRAM_PUBLIC_KEY[if test_dc { 1 } else { 0 }],
-        );
+        let verifying_key =
+            UnparsedPublicKey::new(&ED25519, TELEGRAM_PUBLIC_KEY[if test_dc { 1 } else { 0 }]);
 
+        self.verify_with_key(bot_id, &verifying_key)
+    }
+
+    fn verify_with_key(
+        &self,
+        bot_id: i64,
+        verifying_key: &UnparsedPublicKey<[u8; 32]>,
+    ) -> Result<(), VerifyError> {
         let signature = {
             let raw = self
                 .data_map
                 .get("signature")
                 .ok_or(VerifyError::NoSignature)?;
 
-            let bytes = base64::prelude::BASE64_URL_SAFE_NO_PAD
-                .decode(raw)
-                .map_err(|_| VerifyError::BadSignature)?;
+            // Telegram clients may send base64url with or without padding.
+            let decoder = general_purpose::GeneralPurpose::new(
+                &base64::alphabet::URL_SAFE,
+                general_purpose::GeneralPurposeConfig::new()
+                    .with_decode_padding_mode(DecodePaddingMode::Indifferent),
+            );
+            let bytes = decoder.decode(raw).map_err(|_| VerifyError::BadSignature)?;
 
             if bytes.len() != ED25519_SIGNATURE_LENGTH {
                 return Err(VerifyError::BadSignature);
@@ -93,5 +92,101 @@ impl WebAppInitDataMap {
         verifying_key
             .verify(data_check_string.as_bytes(), signature.as_slice())
             .map_err(|_| VerifyError::IntegrityCheckFailed)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aws_lc_rs::signature::{Ed25519KeyPair, KeyPair};
+
+    const BOT_ID: i64 = 12345678;
+    const USER: &str = r#"{"id":1234567890123,"first_name":"Иван + 100%20"}"#;
+    const CHAT: &str = r#"{"id":-123456789,"type":"group","title":"A & B"}"#;
+
+    fn signed_init_data(padded: bool) -> (WebAppInitDataMap, UnparsedPublicKey<[u8; 32]>) {
+        let key_pair = Ed25519KeyPair::from_seed_unchecked(&[42; 32]).unwrap();
+        // Independent, explicit signing payload: no production parsing or sorting helpers.
+        let payload = format!(
+            "{BOT_ID}:WebAppData\nauth_date=1700000000\nchat={CHAT}\nquery_id=AA+BB/CC=\nuser={USER}"
+        );
+        let signature = key_pair.sign(payload.as_bytes());
+        let encoder = if padded {
+            general_purpose::URL_SAFE
+        } else {
+            general_purpose::URL_SAFE_NO_PAD
+        };
+        let signature = encoder.encode(signature.as_ref());
+        let query = form_urlencoded::Serializer::new(String::new())
+            .extend_pairs([
+                ("user", USER),
+                ("signature", signature.as_str()),
+                ("query_id", "AA+BB/CC="),
+                ("hash", "ignored"),
+                ("chat", CHAT),
+                ("auth_date", "1700000000"),
+            ])
+            .finish();
+        let public_key: [u8; 32] = key_pair.public_key().as_ref().try_into().unwrap();
+        (
+            WebAppInitDataMap::from_str(query),
+            UnparsedPublicKey::new(&ED25519, public_key),
+        )
+    }
+
+    #[test]
+    fn verifies_encoded_fields_and_both_signature_padding_variants() {
+        for padded in [false, true] {
+            let (data, key) = signed_init_data(padded);
+            assert_eq!(data.data_map["user"], USER);
+            assert_eq!(data.data_map["chat"], CHAT);
+            assert_eq!(data.data_map["query_id"], "AA+BB/CC=");
+            assert_eq!(
+                serde_json::from_str::<WebAppUser>(&data.data_map["user"])
+                    .unwrap()
+                    .id,
+                1234567890123,
+            );
+            assert!(data.verify_with_key(BOT_ID, &key).is_ok());
+        }
+    }
+
+    #[test]
+    fn accepts_percent_encoded_spaces_without_decoding_twice() {
+        let data = WebAppInitDataMap::from_str(
+            "user=%7B%22id%22%3A1%2C%22first_name%22%3A%22A%20B%2BC%2520%22%7D".into(),
+        );
+        assert_eq!(data.data_map["user"], r#"{"id":1,"first_name":"A B+C%20"}"#);
+    }
+
+    #[test]
+    fn rejects_tampered_fields_and_wrong_bot() {
+        let (mut data, key) = signed_init_data(true);
+        assert!(matches!(
+            data.verify_with_key(BOT_ID + 1, &key),
+            Err(VerifyError::IntegrityCheckFailed)
+        ));
+        data.data_map.insert("chat".into(), "{}".into());
+        assert!(matches!(
+            data.verify_with_key(BOT_ID, &key),
+            Err(VerifyError::IntegrityCheckFailed)
+        ));
+    }
+
+    #[test]
+    fn rejects_missing_and_malformed_signatures() {
+        let (mut data, key) = signed_init_data(false);
+        for signature in ["!", "AA", ""] {
+            data.data_map.insert("signature".into(), signature.into());
+            assert!(matches!(
+                data.verify_with_key(BOT_ID, &key),
+                Err(VerifyError::BadSignature)
+            ));
+        }
+        data.data_map.remove("signature");
+        assert!(matches!(
+            data.verify_with_key(BOT_ID, &key),
+            Err(VerifyError::NoSignature)
+        ));
     }
 }
